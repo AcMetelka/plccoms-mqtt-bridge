@@ -1,5 +1,6 @@
 package ocervinka.plcmqttbridge;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import ocervinka.plcmqttbridge.config.Config;
 import ocervinka.plcmqttbridge.config.VarMappingConfig;
 import ocervinka.plcmqttbridge.mqtt.Mqtt;
@@ -62,7 +63,7 @@ public class PlcMqttBridge {
 
     private void connect() throws MqttException {
         mqttClient.connect(config.mqtt);
-        plccomsClient.connect(config.plccoms);
+        plccomsClient.connect(config.plccoms, config.mqtt.haDiscovery.enabled);
     }
 
     private void close() throws MqttException {
@@ -117,6 +118,55 @@ public class PlcMqttBridge {
             LOGGER.info("  {}", unmappedVar);
         }
 
+        // ** Add HomeAssistant Discovery Topics **
+        if (config.mqtt.haDiscovery.enabled) {
+            for (Map.Entry<String, VarMapping> entry : varMappingsByVariable.entrySet()) {
+                String haPrefix = config.mqtt.haDiscovery.prefix;
+                String deviceName = config.mqtt.haDiscovery.deviceName;
+                String deviceFriendlyName = config.mqtt.haDiscovery.deviceFriendlyName;
+                String deviceModel = config.mqtt.haDiscovery.deviceModel;
+                String plcDeviceVersion = plccomsClient.plcVersion;
+                String plcDeviceIp = plccomsClient.plcIp;
+                VarMapping mapping = entry.getValue();
+                String entityId = entry.getValue().destination.substring(entry.getValue().destination.lastIndexOf('/') + 1);
+                String haDiscoveryTopic = haPrefix + "/sensor/" + deviceName + "/" + entityId + "/config";
+
+                // Home Assistant discovery payload (JSON format)
+                Map<String, Object> haDiscoveryPayload = new HashMap<>();
+                haDiscoveryPayload.put("name", entityId);
+                haDiscoveryPayload.put("uniq_id", deviceName + "_" + entityId);
+                haDiscoveryPayload.put("stat_t", mapping.destination);
+                // Add device data
+                Map<String, Object> device = new HashMap<>();
+                device.put("ids", deviceName);
+                device.put("name", deviceFriendlyName);
+                device.put("mdl", deviceModel);
+                device.put("sw", plcDeviceVersion);
+                device.put("mf", "Teco a.s.");
+                // Add connection list
+                List<List<String>> cns = new ArrayList<>();
+                cns.add(Arrays.asList("ip", plcDeviceIp));
+                device.put("cns", cns);
+                haDiscoveryPayload.put("device", device);
+                // Convert to JSON
+                ObjectMapper objectMapper = new ObjectMapper();
+                String haDiscoveryPayloadStr = null;
+                try {
+                    haDiscoveryPayloadStr = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(haDiscoveryPayload);
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException(e);
+                }
+
+                try {
+                    mqttClient.publish(haDiscoveryTopic, haDiscoveryPayloadStr);  // Retained message
+                    LOGGER.info("Published HA discovery: {}", haDiscoveryTopic);
+                } catch (Exception e) {
+                    LOGGER.error("Failed to publish Home Assistant discovery for {}", mapping.destination, e);
+                }
+            }
+        }
+
+        // ** Subscribe to MQTT Topics **
         try {
             mqttClient.subscribe(varMappingsByTopic.keySet(), (topic, message) -> {
                 VarMapping varMapping = varMappingsByTopic.get(topic);

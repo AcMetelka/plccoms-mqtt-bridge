@@ -19,6 +19,7 @@ public class MqttConfig {
     /** Not used if null */
     public final char[] password;
     public final String clientId;
+    public final MqttHaDiscoveryConfig haDiscovery;
 
     @JsonCreator
     public MqttConfig(
@@ -27,16 +28,16 @@ public class MqttConfig {
             @JsonProperty("port") Integer port,
             @JsonProperty("username") String username,
             @JsonProperty("password") char[] password,
-            @JsonProperty("clientId") String clientId)
-    {
+            @JsonProperty("clientId") String clientId,
+            @JsonProperty("ha-discovery") MqttHaDiscoveryConfig haDiscovery) {
         this.scheme = scheme == null ? DEFAULT_SCHEME : scheme;
         this.host = host == null ? DEFAULT_HOST : host;
         this.port = port == null ? (this.scheme.equals(DEFAULT_SCHEME) ? DEFAULT_PORT_TCP : DEFAULT_PORT_TLS) : port;
         this.username = username;
         this.password = password;
         this.clientId = clientId == null ? UUID.randomUUID().toString() : clientId;
+        this.haDiscovery = haDiscovery != null ? haDiscovery : new MqttHaDiscoveryConfig(null, "homeassistant", null, null, null);
     }
-
 
     public String getUri() {
         return scheme + "://" + host + ":" + port;
