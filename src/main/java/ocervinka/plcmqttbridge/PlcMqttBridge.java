@@ -150,7 +150,7 @@ public class PlcMqttBridge {
                 haDiscoveryPayload.put("device", device);
                 // Convert to JSON
                 ObjectMapper objectMapper = new ObjectMapper();
-                String haDiscoveryPayloadStr = null;
+                String haDiscoveryPayloadStr;
                 try {
                     haDiscoveryPayloadStr = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(haDiscoveryPayload);
                 } catch (JsonProcessingException e) {
