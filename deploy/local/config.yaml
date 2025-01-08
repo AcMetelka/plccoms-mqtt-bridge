@@ -7,7 +7,13 @@ mqtt:
   host: localhost # kubectl --context j5005 port-forward svc/mosquitto 1883:1883
   port: 1883
   clientId: plccoms-mqtt-bridge
-
+  ha-discovery:
+    enabled: true
+    prefix: homeassistant
+    device-name: plc-teco
+    device-friendly-name: PLC Teco
+    device-model: PLC-CP1000
+    
 var-blacklist:
   - "STATE_.+"
   - ".+_ON"
