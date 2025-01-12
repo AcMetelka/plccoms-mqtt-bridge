@@ -128,7 +128,7 @@ public class PlcMqttBridge {
                 String plcDeviceVersion = plccomsClient.plcVersion;
                 String plcDeviceIp = plccomsClient.plcIp;
                 VarMapping mapping = entry.getValue();
-                String entityId = entry.getKey().replace('.', '_').replaceAll("\\[(\\d+)\\]", "_$1").toLowerCase();
+                String entityId = entry.getKey().replace('.', '_').replaceAll("\\[(\\d+)]", "_$1").toLowerCase();
                 String haDiscoveryTopic = haPrefix + "/sensor/" + deviceName + "/" + entityId + "/config";
 
                 // Home Assistant discovery payload (JSON format)
