@@ -32,6 +32,7 @@ public class PlcMqttBridge {
 
     private final Map<String, VarMapping> varMappingsByTopic = new HashMap<>();
     private final Map<String, VarMapping> varMappingsByVariable = new HashMap<>();
+    private final Map<String, VarMapping> varMappingsByVariableHaName = new HashMap<>();
 
 
     public static void main(String[] args) throws MqttException, IOException {
@@ -98,6 +99,10 @@ public class PlcMqttBridge {
                         varMappingsByTopic.put(topicName, new VarMapping(config, var.name));
                         LOGGER.info("Command topic mapped: {} {} <- {}", var.name, var.type, topicName);
                     }
+                    if (config.haName != null) {
+                        String haName = config.haName.format(getGroups(matcher));
+                        varMappingsByVariableHaName.put(var.name, new VarMapping(config, haName));
+                    }
                     continue for_each_label;
                 }
             }
@@ -121,6 +126,7 @@ public class PlcMqttBridge {
         // ** Add HomeAssistant Discovery Topics **
         if (config.mqtt.haDiscovery.enabled) {
             for (Map.Entry<String, VarMapping> entry : varMappingsByVariable.entrySet()) {
+                String entityName;
                 String haPrefix = config.mqtt.haDiscovery.prefix;
                 String deviceName = config.mqtt.haDiscovery.deviceName;
                 String deviceFriendlyName = config.mqtt.haDiscovery.deviceFriendlyName;
@@ -128,12 +134,36 @@ public class PlcMqttBridge {
                 String plcDeviceVersion = plccomsClient.plcVersion;
                 String plcDeviceIp = plccomsClient.plcIp;
                 VarMapping mapping = entry.getValue();
+                VarMapping haName = varMappingsByVariableHaName.get(entry.getKey());
+                if (haName != null) {
+                    entityName = Arrays.stream(
+                                    haName.destination
+                                            .replaceAll("[._]", " ") // Replace dots and underscores with spaces
+                                            .split("\\s+") // Split on spaces (handles multiple spaces gracefully)
+                            )
+                            .map(word -> {
+                                // Capitalize only if the first letter is lowercase
+                                if (Character.isLowerCase(word.charAt(0))) {
+                                    return word.substring(0, 1).toUpperCase() + word.substring(1); // Capitalize first letter
+                                }
+                                return word; // Leave unchanged if already capitalized
+                            })
+                            .collect(Collectors.joining(" ")); // Join with spaces
+                } else {
+                    entityName = Arrays.stream(
+                                    entry.getKey()
+                                            .replaceAll("\\[(\\d+)]", " $1") // Replace [n] with space + n
+                                            .split("\\.") // Split on dots
+                            )
+                            .map(word -> word.substring(0, 1).toUpperCase() + word.substring(1).toLowerCase()) // Capitalize each word
+                            .collect(Collectors.joining(" ")); // Join with spaces
+                }
                 String entityId = entry.getKey().replace('.', '_').replaceAll("\\[(\\d+)]", "_$1").toLowerCase();
                 String haDiscoveryTopic = haPrefix + "/sensor/" + deviceName + "/" + entityId + "/config";
 
                 // Home Assistant discovery payload (JSON format)
                 Map<String, Object> haDiscoveryPayload = new HashMap<>();
-                haDiscoveryPayload.put("name", entityId);
+                haDiscoveryPayload.put("name", entityName);
                 haDiscoveryPayload.put("uniq_id", deviceName + "_" + entityId);
                 haDiscoveryPayload.put("stat_t", mapping.destination);
                 // Add device data
@@ -215,7 +245,6 @@ public class PlcMqttBridge {
         for (int i = 0; i < groups.length; i++) {
             groups[i] = matcher.group(i).toLowerCase();
         }
-
         return groups;
     }
 }

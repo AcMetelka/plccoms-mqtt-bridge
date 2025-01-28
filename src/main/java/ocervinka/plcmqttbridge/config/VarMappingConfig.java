@@ -26,6 +26,7 @@ public class VarMappingConfig {
     public final Function<String, String> stateFunction;
     public final MessageFormat cmdTopic;
     public final Function<String, String> cmdFunction;
+    public final MessageFormat haName;
     public final Level logLevel;
 
     @JsonCreator
@@ -36,6 +37,7 @@ public class VarMappingConfig {
             @JsonProperty("state-function") String stateFunction,
             @JsonProperty("cmd-topic") String cmdTopic,
             @JsonProperty("cmd-function") String cmdFunction,
+            @JsonProperty("ha-name") String haName,
             @JsonProperty("log-level") String logLevel)
     {
         this.varPattern = Pattern.compile(var);
@@ -44,6 +46,7 @@ public class VarMappingConfig {
         this.stateFunction = getFunction(stateFunction);
         this.cmdTopic = cmdTopic == null ? null : new MessageFormat(cmdTopic);
         this.cmdFunction = getFunction(cmdFunction);
+        this.haName = haName == null ? null : new MessageFormat(haName);
         this.logLevel = Level.toLevel(logLevel, Level.INFO);
     }
 
