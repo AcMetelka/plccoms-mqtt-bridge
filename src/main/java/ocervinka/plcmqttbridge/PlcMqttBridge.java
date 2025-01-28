@@ -224,7 +224,8 @@ public class PlcMqttBridge {
 
         String convertedValue;
         try {
-            convertedValue = varMapping.config.stateFunction.apply(diff.value);
+            convertedValue = varMapping.config.stateFunction.apply(diff.value); // OneToOn, OnToOne
+            convertedValue = varMapping.config.decimalFunction.apply(convertedValue); // Decimals
             LOGGER.log(varMapping.config.logLevel, "PLC->MQTT: {},{} -> {},{}",
                     diff.name, diff.value, varMapping.destination, convertedValue);
         } catch (Exception e) {

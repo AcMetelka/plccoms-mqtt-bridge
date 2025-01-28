@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import ocervinka.plcmqttbridge.functions.Decimals;
 import ocervinka.plcmqttbridge.functions.Noop;
 import ocervinka.plcmqttbridge.functions.OnToOne;
 import ocervinka.plcmqttbridge.functions.OneToOn;
@@ -26,6 +27,7 @@ public class VarMappingConfig {
     public final Function<String, String> stateFunction;
     public final MessageFormat cmdTopic;
     public final Function<String, String> cmdFunction;
+    public final Function<String, String> decimalFunction;
     public final MessageFormat haName;
     public final Level logLevel;
 
@@ -38,6 +40,7 @@ public class VarMappingConfig {
             @JsonProperty("cmd-topic") String cmdTopic,
             @JsonProperty("cmd-function") String cmdFunction,
             @JsonProperty("ha-name") String haName,
+            @JsonProperty("state-decimals") Integer stateDecimals,
             @JsonProperty("log-level") String logLevel)
     {
         this.varPattern = Pattern.compile(var);
@@ -47,6 +50,7 @@ public class VarMappingConfig {
         this.cmdTopic = cmdTopic == null ? null : new MessageFormat(cmdTopic);
         this.cmdFunction = getFunction(cmdFunction);
         this.haName = haName == null ? null : new MessageFormat(haName);
+        this.decimalFunction = stateDecimals != null ? new Decimals(stateDecimals) : NOOP;  // Rounding logic separate
         this.logLevel = Level.toLevel(logLevel, Level.INFO);
     }
 
