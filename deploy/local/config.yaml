@@ -66,4 +66,5 @@ var-mapping:
   # Switch temperature sensor
   - var: "SW_(.*)_TERM"
     state-topic: "home/{1}/switch-temp"
+    ha-name: "Switch {1} Temp Sensor"
     log-level: trace
