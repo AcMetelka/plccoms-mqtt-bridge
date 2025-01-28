@@ -21,8 +21,6 @@ public class Decimals implements Function<String, String> {
     }
 
     private static String getDecimalPattern(int decimals) {
-        StringBuilder pattern = new StringBuilder("0.");
-        pattern.append("0".repeat(Math.max(0, decimals)));
-        return pattern.toString();
+        return "0." + "0".repeat(Math.max(0, decimals));
     }
 }
