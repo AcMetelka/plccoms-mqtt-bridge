@@ -4,11 +4,9 @@ import java.text.DecimalFormat;
 import java.util.function.Function;
 
 public class Decimals implements Function<String, String> {
-    private final int decimals;
     private final DecimalFormat decimalFormat;
 
     public Decimals(int decimals) {
-        this.decimals = decimals;
         this.decimalFormat = new DecimalFormat(getDecimalPattern(decimals));
     }
 
@@ -24,9 +22,7 @@ public class Decimals implements Function<String, String> {
 
     private static String getDecimalPattern(int decimals) {
         StringBuilder pattern = new StringBuilder("0.");
-        for (int i = 0; i < decimals; i++) {
-            pattern.append("0");
-        }
+        pattern.append("0".repeat(Math.max(0, decimals)));
         return pattern.toString();
     }
 }
