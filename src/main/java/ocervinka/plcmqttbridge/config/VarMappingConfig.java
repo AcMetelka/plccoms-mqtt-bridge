@@ -29,6 +29,9 @@ public class VarMappingConfig {
     public final Function<String, String> cmdFunction;
     public final Function<String, String> decimalFunction;
     public final MessageFormat haName;
+    public final MessageFormat haComponent;
+    public final MessageFormat haDeviceClass;
+    public final MessageFormat haUnitOfMeas;
     public final Level logLevel;
 
     @JsonCreator
@@ -40,6 +43,9 @@ public class VarMappingConfig {
             @JsonProperty("cmd-topic") String cmdTopic,
             @JsonProperty("cmd-function") String cmdFunction,
             @JsonProperty("ha-name") String haName,
+            @JsonProperty("ha-component") String haComponent,
+            @JsonProperty("ha-device-class") String haDeviceClass,
+            @JsonProperty("ha-unit-of-meas") String haUnitOfMeas,
             @JsonProperty("state-decimals") Integer stateDecimals,
             @JsonProperty("log-level") String logLevel)
     {
@@ -50,6 +56,9 @@ public class VarMappingConfig {
         this.cmdTopic = cmdTopic == null ? null : new MessageFormat(cmdTopic);
         this.cmdFunction = getFunction(cmdFunction);
         this.haName = haName == null ? null : new MessageFormat(haName);
+        this.haComponent = haComponent == null ? null : new MessageFormat(haComponent);
+        this.haDeviceClass = haDeviceClass == null ? null : new MessageFormat(haDeviceClass);
+        this.haUnitOfMeas = haUnitOfMeas == null ? null : new MessageFormat(haUnitOfMeas);
         this.decimalFunction = stateDecimals != null ? new Decimals(stateDecimals) : NOOP;  // Rounding logic separate
         this.logLevel = Level.toLevel(logLevel, Level.INFO);
     }
@@ -65,4 +74,5 @@ public class VarMappingConfig {
             throw new IllegalArgumentException("Unknown converter " + functionName);
         }
     }
+
 }

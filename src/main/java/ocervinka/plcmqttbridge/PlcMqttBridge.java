@@ -33,6 +33,10 @@ public class PlcMqttBridge {
     private final Map<String, VarMapping> varMappingsByTopic = new HashMap<>();
     private final Map<String, VarMapping> varMappingsByVariable = new HashMap<>();
     private final Map<String, VarMapping> varMappingsByVariableHaName = new HashMap<>();
+    private final Map<String, VarMapping> varMappingsByVariableHaComponent = new HashMap<>();
+    private final Map<String, VarMapping> varMappingsByVariableHaDeviceClass = new HashMap<>();
+    private final Map<String, VarMapping> varMappingsByVariableHaUnitOfMeas = new HashMap<>();
+    private final Map<String, String> strMappingsCmdTopicByVariable = new HashMap<>();
 
 
     public static void main(String[] args) throws MqttException, IOException {
@@ -97,11 +101,24 @@ public class PlcMqttBridge {
                     if (config.cmdTopic != null) {
                         topicName = config.cmdTopic.format(getGroups(matcher));
                         varMappingsByTopic.put(topicName, new VarMapping(config, var.name));
+                        strMappingsCmdTopicByVariable.put(var.name, topicName);
                         LOGGER.info("Command topic mapped: {} {} <- {}", var.name, var.type, topicName);
                     }
                     if (config.haName != null) {
                         String haName = config.haName.format(getGroups(matcher));
                         varMappingsByVariableHaName.put(var.name, new VarMapping(config, haName));
+                    }
+                    if (config.haComponent != null) {
+                        String haComponent = config.haComponent.format(getGroups(matcher));
+                        varMappingsByVariableHaComponent.put(var.name, new VarMapping(config, haComponent));
+                    }
+                    if (config.haDeviceClass != null) {
+                        String haDeviceClass = config.haDeviceClass.format(getGroups(matcher));
+                        varMappingsByVariableHaDeviceClass.put(var.name, new VarMapping(config, haDeviceClass));
+                    }
+                    if (config.haUnitOfMeas != null) {
+                        String haUnitOfMeas = config.haUnitOfMeas.format(getGroups(matcher));
+                        varMappingsByVariableHaUnitOfMeas.put(var.name, new VarMapping(config, haUnitOfMeas));
                     }
                     continue for_each_label;
                 }
@@ -158,14 +175,28 @@ public class PlcMqttBridge {
                             .map(word -> word.substring(0, 1).toUpperCase() + word.substring(1).toLowerCase()) // Capitalize each word
                             .collect(Collectors.joining(" ")); // Join with spaces
                 }
+                VarMapping haDeviceClass = varMappingsByVariableHaDeviceClass.get(entry.getKey());
+                VarMapping haUnitOfMeas = varMappingsByVariableHaUnitOfMeas.get(entry.getKey());
+                VarMapping haComponent = varMappingsByVariableHaComponent.get(entry.getKey());
+                String cmdTopic = strMappingsCmdTopicByVariable.get(entry.getKey());
+
+                String component = haComponent != null ? haComponent.destination : "sensor";
                 String entityId = entry.getKey().replace('.', '_').replaceAll("\\[(\\d+)]", "_$1").toLowerCase();
-                String haDiscoveryTopic = haPrefix + "/sensor/" + deviceName + "/" + entityId + "/config";
+                String haDiscoveryTopic = haPrefix + "/" + component + "/" + deviceName + "/" + entityId + "/config";
 
                 // Home Assistant discovery payload (JSON format)
                 Map<String, Object> haDiscoveryPayload = new HashMap<>();
                 haDiscoveryPayload.put("name", entityName);
                 haDiscoveryPayload.put("uniq_id", deviceName + "_" + entityId);
-                haDiscoveryPayload.put("stat_t", mapping.destination);
+                haDiscoveryPayload.put("state_topic", mapping.destination);
+                if (cmdTopic != null) {
+                    haDiscoveryPayload.put("command_topic", cmdTopic);
+                }
+                if (haDeviceClass != null)
+                    haDiscoveryPayload.put("dev_cla", haDeviceClass.destination);
+                haDiscoveryPayload.put("stat_cla", "measurement");
+                if (haUnitOfMeas != null)
+                    haDiscoveryPayload.put("unit_of_meas", haUnitOfMeas.destination);
                 // Add device data
                 Map<String, Object> device = new HashMap<>();
                 device.put("ids", deviceName);
