@@ -207,8 +207,6 @@ public class PlcMqttBridge {
     }
 
     private static String getComponent(VarMapping mapping, String haComponent) {
-        boolean isBoolState = mapping.config.isOneToOnState();
-        boolean isBoolCmd   = mapping.config.isOnToOneCmd();
         boolean hasCmd      = mapping.config.cmdTopic != null;
 
         String component;
