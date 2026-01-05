@@ -79,6 +79,5 @@ public class VarMappingConfig {
     }
 
     public boolean isOneToOnState() { return stateFunction == ONE_TO_ON; }
-    public boolean isOnToOneCmd() { return cmdFunction == ON_TO_ONE; }
 
 }
