@@ -25,9 +25,10 @@ public class VarMappingConfig {
     public final Double varDelta;
     public final MessageFormat stateTopic;
     public final Function<String, String> stateFunction;
+    public final Function<String, String> decimalFunction;
     public final MessageFormat cmdTopic;
     public final Function<String, String> cmdFunction;
-    public final Function<String, String> decimalFunction;
+    public final boolean mqttToPlcOnly;
     public final MessageFormat haName;
     public final MessageFormat haComponent;
     public final MessageFormat haDeviceClass;
@@ -40,26 +41,28 @@ public class VarMappingConfig {
             @JsonProperty("var-delta") Double varDelta,
             @JsonProperty(value = "state-topic", required = true) String stateTopic,
             @JsonProperty("state-function") String stateFunction,
+            @JsonProperty("state-decimals") Integer stateDecimals,
             @JsonProperty("cmd-topic") String cmdTopic,
             @JsonProperty("cmd-function") String cmdFunction,
+            @JsonProperty("mqtt-to-plc-only") Boolean mqttToPlcOnly,
             @JsonProperty("ha-name") String haName,
             @JsonProperty("ha-component") String haComponent,
             @JsonProperty("ha-device-class") String haDeviceClass,
             @JsonProperty("ha-unit-of-meas") String haUnitOfMeas,
-            @JsonProperty("state-decimals") Integer stateDecimals,
             @JsonProperty("log-level") String logLevel)
     {
         this.varPattern = Pattern.compile(var);
         this.varDelta = varDelta;
         this.stateTopic = new MessageFormat(stateTopic);
         this.stateFunction = getFunction(stateFunction);
+        this.decimalFunction = stateDecimals != null ? new Decimals(stateDecimals) : NOOP;
         this.cmdTopic = cmdTopic == null ? null : new MessageFormat(cmdTopic);
         this.cmdFunction = getFunction(cmdFunction);
+        this.mqttToPlcOnly = mqttToPlcOnly != null && mqttToPlcOnly;
         this.haName = haName == null ? null : new MessageFormat(haName);
         this.haComponent = haComponent == null ? null : new MessageFormat(haComponent);
         this.haDeviceClass = haDeviceClass == null ? null : new MessageFormat(haDeviceClass);
         this.haUnitOfMeas = haUnitOfMeas == null ? null : new MessageFormat(haUnitOfMeas);
-        this.decimalFunction = stateDecimals != null ? new Decimals(stateDecimals) : NOOP;  // Rounding logic separate
         this.logLevel = Level.toLevel(logLevel, Level.INFO);
     }
 
@@ -74,5 +77,8 @@ public class VarMappingConfig {
             throw new IllegalArgumentException("Unknown converter " + functionName);
         }
     }
+
+    public boolean isOneToOnState() { return stateFunction == ONE_TO_ON; }
+    public boolean isOnToOneCmd() { return cmdFunction == ON_TO_ONE; }
 
 }
