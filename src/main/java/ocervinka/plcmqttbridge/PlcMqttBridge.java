@@ -1,5 +1,6 @@
 package ocervinka.plcmqttbridge;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import ocervinka.plcmqttbridge.config.Config;
 import ocervinka.plcmqttbridge.config.VarMappingConfig;
 import ocervinka.plcmqttbridge.mqtt.Mqtt;
@@ -32,7 +33,6 @@ public class PlcMqttBridge {
     private final Map<String, VarMapping> varMappingsByTopic = new HashMap<>();
     private final Map<String, VarMapping> varMappingsByVariable = new HashMap<>();
 
-
     public static void main(String[] args) throws MqttException, IOException {
         LOGGER.info("Starting plccoms-mqtt-bridge");
         LOGGER.info("Version: {}", System.getenv("VERSION_TAG"));
@@ -62,7 +62,7 @@ public class PlcMqttBridge {
 
     private void connect() throws MqttException {
         mqttClient.connect(config.mqtt);
-        plccomsClient.connect(config.plccoms);
+        plccomsClient.connect(config.plccoms, config.mqtt.haDiscovery.enabled);
     }
 
     private void close() throws MqttException {
@@ -89,18 +89,23 @@ public class PlcMqttBridge {
             for (VarMappingConfig config : config.varMappings) {
                 Matcher matcher = config.varPattern.matcher(var.name);
                 if (matcher.matches()) {
-                    String topicName = config.stateTopic.format(getGroups(matcher));
-                    varMappingsByVariable.put(var.name, new VarMapping(config, topicName));
-                    LOGGER.info("State topic mapped:   {} {} -> {}", var.name, var.type, topicName);
+                    String stateTopic       = config.stateTopic.format(getGroups(matcher));
+                    String cmdTopic         = config.cmdTopic != null ? config.cmdTopic.format(getGroups(matcher)) : null;
+                    boolean mqttToPlcOnly   = config.mqttToPlcOnly;
+                    String haName           = config.haName != null ? config.haName.format(getGroups(matcher)) : null;
+                    String haComponent      = config.haComponent != null ? config.haComponent.format(getGroups(matcher)) : null;
+                    String haDevClass       = config.haDeviceClass != null ? config.haDeviceClass.format(getGroups(matcher)) : null;
+                    String haUnit           = config.haUnitOfMeas != null ? config.haUnitOfMeas.format(getGroups(matcher)) : null;
+
+                    varMappingsByVariable.put(var.name, new VarMapping(config, var.name, stateTopic, cmdTopic, mqttToPlcOnly, haName, haComponent, haDevClass, haUnit));
+                    LOGGER.info("State topic mapped:   {} {} -> {}", var.name, var.type, stateTopic);
                     if (config.cmdTopic != null) {
-                        topicName = config.cmdTopic.format(getGroups(matcher));
-                        varMappingsByTopic.put(topicName, new VarMapping(config, var.name));
-                        LOGGER.info("Command topic mapped: {} {} <- {}", var.name, var.type, topicName);
+                        varMappingsByTopic.put(cmdTopic, new VarMapping(config, var.name, stateTopic, cmdTopic, mqttToPlcOnly, haName, haComponent, haDevClass, haUnit));
+                        LOGGER.info("Command topic mapped: {} {} <- {}", var.name, var.type, stateTopic);
                     }
                     continue for_each_label;
                 }
             }
-
             unmappedVars.add(var.name + " " + var.type);
         }
 
@@ -117,14 +122,73 @@ public class PlcMqttBridge {
             LOGGER.info("  {}", unmappedVar);
         }
 
+        // ** Add HomeAssistant Discovery Topics **
+        if (config.mqtt.haDiscovery.enabled) {
+            for (Map.Entry<String, VarMapping> entry : varMappingsByVariable.entrySet()) {
+                String haPrefix = config.mqtt.haDiscovery.prefix;
+                String deviceName = config.mqtt.haDiscovery.deviceName;
+                String deviceFriendlyName = config.mqtt.haDiscovery.deviceFriendlyName;
+                String deviceModel = config.mqtt.haDiscovery.deviceModel;
+                String plcDeviceVersion = plccomsClient.plcVersion;
+                String plcDeviceIp = plccomsClient.plcIp;
+
+                VarMapping mapping = entry.getValue();
+                if (mapping.mqttToPlcOnly)
+                    continue;
+                String entityName = getEntityName(mapping, entry.getKey());
+                String component = getComponent(mapping, mapping.haComponent);
+                String entityId = entry.getKey().replace('.', '_').replaceAll("\\[(\\d+)]", "_$1").toLowerCase();
+
+                String haDiscoveryTopic = haPrefix + "/" + component + "/" + deviceName + "/" + entityId + "/config";
+
+                // Home Assistant discovery payload (JSON format)
+                Map<String, Object> haDiscoveryPayload = new HashMap<>();
+                haDiscoveryPayload.put("name", entityName);
+                haDiscoveryPayload.put("uniq_id", deviceName + "_" + entityId);
+                haDiscoveryPayload.put("state_topic", mapping.stateTopic);
+                if (mapping.cmdTopic != null) haDiscoveryPayload.put("command_topic", mapping.cmdTopic);
+                if (mapping.haDeviceClass != null) haDiscoveryPayload.put("device_class", mapping.haDeviceClass);
+                if ("sensor".equals(component)) haDiscoveryPayload.put("state_class", "measurement");
+                if (mapping.haUnitOfMeas != null) haDiscoveryPayload.put("unit_of_meas", mapping.haUnitOfMeas);
+                // Add device data
+                Map<String, Object> device = new HashMap<>();
+                device.put("ids", deviceName);
+                device.put("name", deviceFriendlyName);
+                device.put("mdl", deviceModel);
+                device.put("sw", plcDeviceVersion);
+                device.put("mf", "Teco a.s.");
+                // Add connection list
+                List<List<String>> cns = new ArrayList<>();
+                cns.add(Arrays.asList("ip", plcDeviceIp));
+                device.put("cns", cns);
+                haDiscoveryPayload.put("device", device);
+                // Convert to JSON
+                ObjectMapper objectMapper = new ObjectMapper();
+                String haDiscoveryPayloadStr;
+                try {
+                    haDiscoveryPayloadStr = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(haDiscoveryPayload);
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException(e);
+                }
+
+                try {
+                    mqttClient.publish(haDiscoveryTopic, haDiscoveryPayloadStr);  // Retained message
+                    LOGGER.info("Published HA discovery: {}", haDiscoveryTopic);
+                } catch (Exception e) {
+                    LOGGER.error("Failed to publish Home Assistant discovery for {}", mapping.haName, e);
+                }
+            }
+        }
+
+        // ** Subscribe to MQTT Topics **
         try {
             mqttClient.subscribe(varMappingsByTopic.keySet(), (topic, message) -> {
                 VarMapping varMapping = varMappingsByTopic.get(topic);
                 String inputValue = new String(message.getPayload());
                 String convertedValue = varMapping.config.cmdFunction.apply(inputValue);
                 LOGGER.log(varMapping.config.logLevel, "MQTT->PLC: {},{} -> {},{}",
-                        topic, inputValue, varMapping.destination, convertedValue);
-                plccomsClient.setVar(varMapping.destination, convertedValue);
+                        topic, inputValue, varMapping.stateTopic, convertedValue);
+                plccomsClient.setVar(varMapping.varName, convertedValue);
             });
         } catch (MqttException e) {
             LOGGER.error("Failed to subscribe to topic(s)", e);
@@ -135,6 +199,48 @@ public class PlcMqttBridge {
                 .collect(Collectors.toList());
     }
 
+    private static String getComponent(VarMapping mapping, String haComponent) {
+        boolean hasCmd      = mapping.config.cmdTopic != null;
+
+        String component;
+        if (haComponent != null) {
+            component = haComponent;
+        } else if (mapping.config.isOneToOnState()) {
+            component = hasCmd ? "switch" : "binary_sensor";
+        } else {
+            component = hasCmd ? "number" : "sensor";
+        }
+        return component;
+    }
+    private static String getEntityName(VarMapping mapping, String varName) {
+        if (mapping.haName != null && !mapping.haName.isBlank()) {
+            return Arrays.stream(
+                            mapping.haName
+                                    .replaceAll("[._]", " ")
+                                    .split("\\s+")
+                    )
+                    .map(word -> {
+                        if (!word.isEmpty() && Character.isLowerCase(word.charAt(0))) {
+                            return Character.toUpperCase(word.charAt(0)) + word.substring(1);
+                        }
+                        return word;
+                    })
+                    .collect(Collectors.joining(" "));
+        }
+        // Fallback: name from PLC variable name
+        return Arrays.stream(
+                        varName
+                                .replaceAll("\\[(\\d+)]", " $1")
+                                .split("\\.")
+                )
+                .map(word ->
+                        word.isEmpty()
+                                ? word
+                                : Character.toUpperCase(word.charAt(0)) + word.substring(1).toLowerCase()
+                )
+                .collect(Collectors.joining(" "));
+    }
+
     private void onDiff(PlccomsDiff diff) {
         VarMapping varMapping = varMappingsByVariable.get(diff.name);
         if (varMapping == null) {
@@ -142,21 +248,27 @@ public class PlcMqttBridge {
             return;
         }
 
+        if (varMapping.config.mqttToPlcOnly) {
+            LOGGER.debug("PLC->MQTT suppressed (mqtt-to-plc-only): {}", diff.name);
+            return;
+        }
+
         String convertedValue;
         try {
-            convertedValue = varMapping.config.stateFunction.apply(diff.value);
+            convertedValue = varMapping.config.stateFunction.apply(diff.value); // OneToOn, OnToOne
+            convertedValue = varMapping.config.decimalFunction.apply(convertedValue); // Decimals
             LOGGER.log(varMapping.config.logLevel, "PLC->MQTT: {},{} -> {},{}",
-                    diff.name, diff.value, varMapping.destination, convertedValue);
+                    diff.name, diff.value, varMapping.stateTopic, convertedValue);
         } catch (Exception e) {
             LOGGER.error("PLC->MQTT: {},{} -> {},{}",
-                    diff.name, diff.value, varMapping.destination, e.getMessage());
+                    diff.name, diff.value, varMapping.stateTopic, e.getMessage());
             return;
         }
 
         try {
-            mqttClient.publish(varMapping.destination, convertedValue);
+            mqttClient.publish(varMapping.stateTopic, convertedValue);
         } catch (Exception e) {
-            LOGGER.error("Failed to publish to {}", varMapping.destination, e);
+            LOGGER.error("Failed to publish to {}", varMapping.stateTopic, e);
         }
     }
 
@@ -165,7 +277,6 @@ public class PlcMqttBridge {
         for (int i = 0; i < groups.length; i++) {
             groups[i] = matcher.group(i).toLowerCase();
         }
-
         return groups;
     }
 }

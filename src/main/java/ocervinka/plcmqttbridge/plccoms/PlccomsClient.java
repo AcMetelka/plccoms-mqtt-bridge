@@ -7,6 +7,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -24,34 +26,46 @@ public class PlccomsClient {
 
     private final Collection<PlccomsVar> vars = new ArrayList<>();
 
+    public String plcVersion, plcIp;
 
     public PlccomsClient(Function<Collection<PlccomsVar>, Collection<PlccomsVar>> listConsumer, Consumer<PlccomsDiff> diffConsumer) {
         this.listConsumer = listConsumer;
         this.diffConsumer = diffConsumer;
     }
 
-    public final void connect(PlccomsConfig config) {
+    public final void connect(PlccomsConfig config, boolean haDiscovery) {
         telnetClient = new TelnetClient(config.host, config.port, new TelnetClientListener() {
+
+            private final Queue<String> connectCommandQueue = new LinkedList<>();
 
             @Override
             public void onConnect(TelnetClient tc, String message) {
                 LOGGER.info("Connected to PLCComS: " + message);
-                //tc.write("GETINFO:");
-                //tc.write("GETINFO:version");
-                //tc.write("GETINFO:version_epsnet");
-                //tc.write("GETINFO:version_ini");
-                //tc.write("GETINFO:version_plc");
-                //tc.write("GETINFO:ipaddr_plc");
-                //tc.write("GETINFO:pubfile");
-                //tc.write("GETINFO:network");
 
-                tc.write("LIST:"); // list all variables when connected
+                // Add all commands to queue
+                if (haDiscovery) {
+                    connectCommandQueue.add("GETINFO:version_plc");
+                    connectCommandQueue.add("GETINFO:ipaddr");
+                }
+                connectCommandQueue.add("LIST:"); // LIST is executed last
+
+                // Send the first command
+                sendNextCommand(tc);
+
+            }
+
+            private void sendNextCommand(TelnetClient tc) {
+                if (!connectCommandQueue.isEmpty()) {
+                    String nextCommand = connectCommandQueue.poll();
+                    //LOGGER.info("Sending: " + nextCommand);
+                    tc.write(nextCommand);
+                }
             }
 
             @Override
             public void onLineRead(TelnetClient tc, String line) {
                 String[] splitLine = line.trim().toUpperCase().split(":", -1);
-                if (splitLine.length != 2) {
+                if ( !("GETINFO".equals(splitLine[0])) && splitLine.length != 2) {
                     LOGGER.warn("Invalid command received (no single colon): {}", line);
                     return;
                 }
@@ -59,7 +73,12 @@ public class PlccomsClient {
                 String cmd = splitLine[0];
                 String args = splitLine[1].trim();
 
-                if ("LIST".equals(cmd)) {
+                if ("GETINFO".equals(cmd)) {
+                    if (args.contains("VERSION_PLC")) plcVersion = args.substring(args.indexOf(',') + 1).trim();
+                    if (args.contains("IPADDR")) plcIp = args.substring(args.indexOf(',') + 1).trim();
+                    sendNextCommand(tc);
+
+                } else if ("LIST".equals(cmd)) {
                     if (!args.isBlank()) {
                         Matcher matcher = LIST_CMD_PATTERN.matcher(args);
                         if (matcher.matches()) {
