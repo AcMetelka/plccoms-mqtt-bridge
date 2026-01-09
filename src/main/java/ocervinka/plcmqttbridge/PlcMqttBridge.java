@@ -32,12 +32,6 @@ public class PlcMqttBridge {
 
     private final Map<String, VarMapping> varMappingsByTopic = new HashMap<>();
     private final Map<String, VarMapping> varMappingsByVariable = new HashMap<>();
-    //private final Map<String, VarMapping> varMappingsByVariableHaName = new HashMap<>();
-    //private final Map<String, VarMapping> varMappingsByVariableHaComponent = new HashMap<>();
-    //private final Map<String, VarMapping> varMappingsByVariableHaDeviceClass = new HashMap<>();
-    //private final Map<String, VarMapping> varMappingsByVariableHaUnitOfMeas = new HashMap<>();
-    //private final Map<String, String> strMappingsCmdTopicByVariable = new HashMap<>();
-
 
     public static void main(String[] args) throws MqttException, IOException {
         LOGGER.info("Starting plccoms-mqtt-bridge");
@@ -112,7 +106,6 @@ public class PlcMqttBridge {
                     continue for_each_label;
                 }
             }
-
             unmappedVars.add(var.name + " " + var.type);
         }
 
@@ -234,7 +227,6 @@ public class PlcMqttBridge {
                     })
                     .collect(Collectors.joining(" "));
         }
-
         // Fallback: name from PLC variable name
         return Arrays.stream(
                         varName
