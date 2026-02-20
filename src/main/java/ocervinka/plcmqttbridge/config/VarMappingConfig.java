@@ -11,6 +11,7 @@ import ocervinka.plcmqttbridge.functions.OneToOn;
 import org.apache.logging.log4j.Level;
 
 import java.text.MessageFormat;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -33,6 +34,10 @@ public class VarMappingConfig {
     public final MessageFormat haComponent;
     public final MessageFormat haDeviceClass;
     public final MessageFormat haUnitOfMeas;
+    public final Map<String, String> haOptions;
+    public final Double haNumberMin;
+    public final Double haNumberMax;
+    public final Double haNumberStep;
     public final Level logLevel;
 
     @JsonCreator
@@ -49,6 +54,10 @@ public class VarMappingConfig {
             @JsonProperty("ha-component") String haComponent,
             @JsonProperty("ha-device-class") String haDeviceClass,
             @JsonProperty("ha-unit-of-meas") String haUnitOfMeas,
+            @JsonProperty("ha-options") Map<String, String> haOptions,
+            @JsonProperty("ha-number-min") Double haNumberMin,
+            @JsonProperty("ha-number-max") Double haNumberMax,
+            @JsonProperty("ha-number-step") Double haNumberStep,
             @JsonProperty("log-level") String logLevel)
     {
         this.varPattern = Pattern.compile(var);
@@ -63,6 +72,10 @@ public class VarMappingConfig {
         this.haComponent = haComponent == null ? null : new MessageFormat(haComponent);
         this.haDeviceClass = haDeviceClass == null ? null : new MessageFormat(haDeviceClass);
         this.haUnitOfMeas = haUnitOfMeas == null ? null : new MessageFormat(haUnitOfMeas);
+        this.haOptions = haOptions;
+        this.haNumberMin = haNumberMin;
+        this.haNumberMax = haNumberMax;
+        this.haNumberStep = haNumberStep;
         this.logLevel = Level.toLevel(logLevel, Level.INFO);
     }
 
@@ -79,5 +92,6 @@ public class VarMappingConfig {
     }
 
     public boolean isOneToOnState() { return stateFunction == ONE_TO_ON; }
+    public boolean isEnum() { return haOptions != null && !haOptions.isEmpty(); }
 
 }

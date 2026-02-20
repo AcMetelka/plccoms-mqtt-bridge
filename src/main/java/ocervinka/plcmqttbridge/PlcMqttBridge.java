@@ -96,11 +96,14 @@ public class PlcMqttBridge {
                     String haComponent      = config.haComponent != null ? config.haComponent.format(getGroups(matcher)) : null;
                     String haDevClass       = config.haDeviceClass != null ? config.haDeviceClass.format(getGroups(matcher)) : null;
                     String haUnit           = config.haUnitOfMeas != null ? config.haUnitOfMeas.format(getGroups(matcher)) : null;
+                    Double haNumberMin      = config.haNumberMin;
+                    Double haNumberMax      = config.haNumberMax;
+                    Double haNumberStep     = config.haNumberStep;
 
-                    varMappingsByVariable.put(var.name, new VarMapping(config, var.name, stateTopic, cmdTopic, mqttToPlcOnly, haName, haComponent, haDevClass, haUnit));
+                    varMappingsByVariable.put(var.name, new VarMapping(config, var.name, stateTopic, cmdTopic, mqttToPlcOnly, haName, haComponent, haDevClass, haUnit, haNumberMin, haNumberMax, haNumberStep));
                     LOGGER.info("State topic mapped:   {} {} -> {}", var.name, var.type, stateTopic);
                     if (config.cmdTopic != null) {
-                        varMappingsByTopic.put(cmdTopic, new VarMapping(config, var.name, stateTopic, cmdTopic, mqttToPlcOnly, haName, haComponent, haDevClass, haUnit));
+                        varMappingsByTopic.put(cmdTopic, new VarMapping(config, var.name, stateTopic, cmdTopic, mqttToPlcOnly, haName, haComponent, haDevClass, haUnit, haNumberMin, haNumberMax, haNumberStep));
                         LOGGER.info("Command topic mapped: {} {} <- {}", var.name, var.type, stateTopic);
                     }
                     continue for_each_label;
@@ -148,8 +151,19 @@ public class PlcMqttBridge {
                 haDiscoveryPayload.put("state_topic", mapping.stateTopic);
                 if (mapping.cmdTopic != null) haDiscoveryPayload.put("command_topic", mapping.cmdTopic);
                 if (mapping.haDeviceClass != null) haDiscoveryPayload.put("device_class", mapping.haDeviceClass);
-                if ("sensor".equals(component)) haDiscoveryPayload.put("state_class", "measurement");
-                if (mapping.haUnitOfMeas != null) haDiscoveryPayload.put("unit_of_meas", mapping.haUnitOfMeas);
+                if ("sensor".equals(component)) {
+                    haDiscoveryPayload.put("state_class", "measurement");
+                    if (mapping.haUnitOfMeas != null) haDiscoveryPayload.put("unit_of_measurement", mapping.haUnitOfMeas);
+                } else if ("number".equals(component)) {
+                    if (mapping.haUnitOfMeas != null) haDiscoveryPayload.put("unit_of_measurement", mapping.haUnitOfMeas);
+                    if (mapping.haNumberMin != null) haDiscoveryPayload.put("min", mapping.haNumberMin);
+                    if (mapping.haNumberMax != null) haDiscoveryPayload.put("max", mapping.haNumberMax);
+                    if (mapping.haNumberStep != null) haDiscoveryPayload.put("step", mapping.haNumberStep);
+                    // volitelně: payload.put("mode", "slider"); pokud chceš podporu i pro to
+                }
+                if ("select".equals(component) && mapping.config.haOptions != null) {
+                    haDiscoveryPayload.put( "options", new ArrayList<>(mapping.config.haOptions.values()));
+                }
                 // Add device data
                 Map<String, Object> device = new HashMap<>();
                 device.put("ids", deviceName);
@@ -200,13 +214,15 @@ public class PlcMqttBridge {
     }
 
     private static String getComponent(VarMapping mapping, String haComponent) {
-        boolean hasCmd      = mapping.config.cmdTopic != null;
+        boolean hasCmd = mapping.config.cmdTopic != null;
 
         String component;
         if (haComponent != null) {
             component = haComponent;
         } else if (mapping.config.isOneToOnState()) {
             component = hasCmd ? "switch" : "binary_sensor";
+        } else if (mapping.config.isEnum()) {
+            component = hasCmd ? "select" : "sensor";
         } else {
             component = hasCmd ? "number" : "sensor";
         }

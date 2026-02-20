@@ -19,6 +19,9 @@ public class VarMapping {
     public final String haComponent;   // may be null
     public final String haDeviceClass; // may be null
     public final String haUnitOfMeas;  // may be null
+    public final Double haNumberMin;  // may be null
+    public final Double haNumberMax;  // may be null
+    public final Double haNumberStep;  // may be null
 
     public VarMapping(
             VarMappingConfig config,
@@ -29,7 +32,10 @@ public class VarMapping {
             String haName,
             String haComponent,
             String haDeviceClass,
-            String haUnitOfMeas
+            String haUnitOfMeas,
+            Double haNumberMin,
+            Double haNumberMax,
+            Double haNumberStep
     ) {
         this.config = config;
         this.varName = varName;
@@ -40,5 +46,8 @@ public class VarMapping {
         this.haComponent = haComponent;
         this.haDeviceClass = haDeviceClass;
         this.haUnitOfMeas = haUnitOfMeas;
+        this.haNumberMin = haNumberMin;
+        this.haNumberMax = haNumberMax;
+        this.haNumberStep = haNumberStep;
     }
 }
