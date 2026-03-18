@@ -8,6 +8,8 @@ import ocervinka.plcmqttbridge.functions.Decimals;
 import ocervinka.plcmqttbridge.functions.Noop;
 import ocervinka.plcmqttbridge.functions.OnToOne;
 import ocervinka.plcmqttbridge.functions.OneToOn;
+import ocervinka.plcmqttbridge.functions.EnumToOptions;
+import ocervinka.plcmqttbridge.functions.OptionsToEnum;
 import org.apache.logging.log4j.Level;
 
 import java.text.MessageFormat;
@@ -35,6 +37,8 @@ public class VarMappingConfig {
     public final MessageFormat haDeviceClass;
     public final MessageFormat haUnitOfMeas;
     public final Map<String, String> haOptions;
+    public final Function<String, String> enumFunction;
+    public final Function<String, String> enumReverseFunction;
     public final Double haNumberMin;
     public final Double haNumberMax;
     public final Double haNumberStep;
@@ -73,6 +77,8 @@ public class VarMappingConfig {
         this.haDeviceClass = haDeviceClass == null ? null : new MessageFormat(haDeviceClass);
         this.haUnitOfMeas = haUnitOfMeas == null ? null : new MessageFormat(haUnitOfMeas);
         this.haOptions = haOptions;
+        this.enumFunction = isEnum() ? new EnumToOptions(haOptions) : NOOP;
+        this.enumReverseFunction = isEnum() ? new OptionsToEnum(haOptions) : NOOP;
         this.haNumberMin = haNumberMin;
         this.haNumberMax = haNumberMax;
         this.haNumberStep = haNumberStep;

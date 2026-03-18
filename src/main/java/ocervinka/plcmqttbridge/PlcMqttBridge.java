@@ -147,7 +147,7 @@ public class PlcMqttBridge {
                 // Home Assistant discovery payload (JSON format)
                 Map<String, Object> haDiscoveryPayload = new HashMap<>();
                 haDiscoveryPayload.put("name", entityName);
-                haDiscoveryPayload.put("uniq_id", deviceName + "_" + entityId);
+                haDiscoveryPayload.put("unique_id", deviceName + "_" + entityId);
                 haDiscoveryPayload.put("state_topic", mapping.stateTopic);
                 if (mapping.cmdTopic != null) haDiscoveryPayload.put("command_topic", mapping.cmdTopic);
                 if (mapping.haDeviceClass != null) haDiscoveryPayload.put("device_class", mapping.haDeviceClass);
@@ -199,9 +199,10 @@ public class PlcMqttBridge {
             mqttClient.subscribe(varMappingsByTopic.keySet(), (topic, message) -> {
                 VarMapping varMapping = varMappingsByTopic.get(topic);
                 String inputValue = new String(message.getPayload());
-                String convertedValue = varMapping.config.cmdFunction.apply(inputValue);
+                String convertedValue = varMapping.config.enumReverseFunction.apply(inputValue);
+                convertedValue = varMapping.config.cmdFunction.apply(convertedValue);
                 LOGGER.log(varMapping.config.logLevel, "MQTT->PLC: {},{} -> {},{}",
-                        topic, inputValue, varMapping.stateTopic, convertedValue);
+                        topic, inputValue, varMapping.varName, convertedValue);
                 plccomsClient.setVar(varMapping.varName, convertedValue);
             });
         } catch (MqttException e) {
@@ -273,6 +274,7 @@ public class PlcMqttBridge {
         try {
             convertedValue = varMapping.config.stateFunction.apply(diff.value); // OneToOn, OnToOne
             convertedValue = varMapping.config.decimalFunction.apply(convertedValue); // Decimals
+            convertedValue = varMapping.config.enumFunction.apply(convertedValue);
             LOGGER.log(varMapping.config.logLevel, "PLC->MQTT: {},{} -> {},{}",
                     diff.name, diff.value, varMapping.stateTopic, convertedValue);
         } catch (Exception e) {
