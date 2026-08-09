@@ -24,7 +24,8 @@ public class PlccomsClient {
     private final Function<Collection<PlccomsVar>, Collection<PlccomsVar>> listConsumer;
     private final Consumer<PlccomsDiff> diffConsumer;
 
-    private final Collection<PlccomsVar> vars = new ArrayList<>();
+    private Collection<PlccomsVar> vars = new ArrayList<>();
+    private final Queue<String> connectCommandQueue = new LinkedList<>();
 
     public String plcVersion, plcIp;
 
@@ -36,22 +37,10 @@ public class PlccomsClient {
     public final void connect(PlccomsConfig config, boolean haDiscovery) {
         telnetClient = new TelnetClient(config.host, config.port, new TelnetClientListener() {
 
-            private final Queue<String> connectCommandQueue = new LinkedList<>();
-
             @Override
             public void onConnect(TelnetClient tc, String message) {
                 LOGGER.info("Connected to PLCComS: " + message);
-
-                // Add all commands to queue
-                if (haDiscovery) {
-                    connectCommandQueue.add("GETINFO:version_plc");
-                    connectCommandQueue.add("GETINFO:ipaddr");
-                }
-                connectCommandQueue.add("LIST:"); // LIST is executed last
-
-                // Send the first command
-                sendNextCommand(tc);
-
+                initializeConnection(tc::write, haDiscovery);
             }
 
             private void sendNextCommand(TelnetClient tc) {
@@ -79,27 +68,7 @@ public class PlccomsClient {
                     sendNextCommand(tc);
 
                 } else if ("LIST".equals(cmd)) {
-                    if (!args.isBlank()) {
-                        Matcher matcher = LIST_CMD_PATTERN.matcher(args);
-                        if (matcher.matches()) {
-                            vars.add(new PlccomsVar(matcher.group(1), matcher.group(2)));
-                        } else {
-                            LOGGER.error("LIST args \"{}\" did not match {}", args, LIST_CMD_PATTERN);
-                        }
-                    } else { // last line of LIST command has no arguments
-                        listConsumer.apply(vars);
-                        Collection<PlccomsVar> varsToSubscribe = listConsumer.apply(vars);
-                        for (PlccomsVar var : varsToSubscribe) {
-                            // subscribe to changes
-                            if (var.delta == null) {
-                                tc.write("EN:" + var.name);
-                            } else {
-                                tc.write("EN:" + var.name + " " + var.delta);
-                            }
-                            // request initial value
-                            tc.write("GET:" + var.name);
-                        }
-                    }
+                    processListLine(tc::write, args);
 
                 } else if ("DIFF".equals(cmd) || "GET".equals(cmd)) {
                     try {
@@ -128,6 +97,43 @@ public class PlccomsClient {
                 LOGGER.info("Disconnected from PLCComS");
             }
         });
+    }
+
+    void initializeConnection(Consumer<String> commandConsumer, boolean haDiscovery) {
+        connectCommandQueue.clear();
+        vars = new ArrayList<>();
+
+        if (haDiscovery) {
+            connectCommandQueue.add("GETINFO:version_plc");
+            connectCommandQueue.add("GETINFO:ipaddr");
+        }
+        connectCommandQueue.add("LIST:"); // LIST is executed last
+
+        if (!connectCommandQueue.isEmpty()) {
+            commandConsumer.accept(connectCommandQueue.poll());
+        }
+    }
+
+    void processListLine(Consumer<String> commandConsumer, String args) {
+        if (!args.isBlank()) {
+            Matcher matcher = LIST_CMD_PATTERN.matcher(args);
+            if (matcher.matches()) {
+                vars.add(new PlccomsVar(matcher.group(1), matcher.group(2)));
+            } else {
+                LOGGER.error("LIST args \"{}\" did not match {}", args, LIST_CMD_PATTERN);
+            }
+            return;
+        }
+
+        Collection<PlccomsVar> varsToSubscribe = listConsumer.apply(vars);
+        for (PlccomsVar var : varsToSubscribe) {
+            if (var.delta == null) {
+                commandConsumer.accept("EN:" + var.name);
+            } else {
+                commandConsumer.accept("EN:" + var.name + " " + var.delta);
+            }
+            commandConsumer.accept("GET:" + var.name);
+        }
     }
 
     public void setVar(String name, Object value) {
