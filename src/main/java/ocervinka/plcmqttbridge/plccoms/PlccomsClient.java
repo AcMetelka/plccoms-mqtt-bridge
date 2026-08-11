@@ -11,18 +11,15 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Locale;
 
-public class PlccomsClient {
+public class PlccomsClient implements PlcGateway {
 
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final Pattern LIST_CMD_PATTERN = Pattern.compile("(.+),(.+)");
-
     private TelnetClient telnetClient;
 
-    private final Function<Collection<PlccomsVar>, Collection<PlccomsVar>> listConsumer;
-    private final Consumer<PlccomsDiff> diffConsumer;
+    private Function<Collection<PlccomsVar>, Collection<PlccomsVar>> listConsumer;
+    private Consumer<PlccomsDiff> diffConsumer;
 
     private Collection<PlccomsVar> vars = new ArrayList<>();
     private final Queue<String> connectCommandQueue = new LinkedList<>();
@@ -30,8 +27,16 @@ public class PlccomsClient {
     public String plcVersion, plcIp;
 
     public PlccomsClient(Function<Collection<PlccomsVar>, Collection<PlccomsVar>> listConsumer, Consumer<PlccomsDiff> diffConsumer) {
-        this.listConsumer = listConsumer;
-        this.diffConsumer = diffConsumer;
+        setListeners(listConsumer, diffConsumer);
+    }
+
+    public PlccomsClient() { }
+
+    @Override
+    public void setListeners(Function<Collection<PlccomsVar>, Collection<PlccomsVar>> listListener,
+                             Consumer<PlccomsDiff> diffListener) {
+        this.listConsumer = listListener;
+        this.diffConsumer = diffListener;
     }
 
     public final void connect(PlccomsConfig config, boolean haDiscovery) {
@@ -53,38 +58,7 @@ public class PlccomsClient {
 
             @Override
             public void onLineRead(TelnetClient tc, String line) {
-                String[] splitLine = line.trim().toUpperCase().split(":", -1);
-                if ( !("GETINFO".equals(splitLine[0])) && splitLine.length != 2) {
-                    LOGGER.warn("Invalid command received (no single colon): {}", line);
-                    return;
-                }
-
-                String cmd = splitLine[0];
-                String args = splitLine[1].trim();
-
-                if ("GETINFO".equals(cmd)) {
-                    if (args.contains("VERSION_PLC")) plcVersion = args.substring(args.indexOf(',') + 1).trim();
-                    if (args.contains("IPADDR")) plcIp = args.substring(args.indexOf(',') + 1).trim();
-                    sendNextCommand(tc);
-
-                } else if ("LIST".equals(cmd)) {
-                    processListLine(tc::write, args);
-
-                } else if ("DIFF".equals(cmd) || "GET".equals(cmd)) {
-                    try {
-                        String[] diffArgs = args.split(",");
-                        if (diffArgs.length != 2) {
-                            LOGGER.info("DIFF/GET command must have two arguments: {}", args);
-                            return;
-                        }
-                        diffConsumer.accept(new PlccomsDiff(diffArgs[0], diffArgs[1]));
-                        LOGGER.trace("Received PLCComS: " +diffArgs[0]+" : "+diffArgs[1]);
-                    } catch (Exception e) {
-                        LOGGER.warn("Failed to process DIFF/GET command: {}", args, e);
-                    }
-                } else {
-                    LOGGER.info("Unexpected command \"{}\" received: ", line);
-                }
+                processLine(tc::write, line, () -> sendNextCommand(tc));
             }
 
             @Override
@@ -97,6 +71,50 @@ public class PlccomsClient {
                 LOGGER.info("Disconnected from PLCComS");
             }
         });
+    }
+
+    void processLine(Consumer<String> commandConsumer, String line, Runnable nextCommand) {
+        String trimmedLine = line.trim();
+        int colon = trimmedLine.indexOf(':');
+        if (colon < 0) {
+            String upperLine = trimmedLine.toUpperCase(Locale.ROOT);
+            if (upperLine.startsWith("ERROR") || upperLine.startsWith("WARNING")) {
+                LOGGER.warn("PLCComS reported: {}", line);
+            } else {
+                LOGGER.warn("Invalid command received (no colon): {}", line);
+            }
+            return;
+        }
+
+        String cmd = trimmedLine.substring(0, colon).trim().toUpperCase(Locale.ROOT);
+        String args = trimmedLine.substring(colon + 1).trim();
+        if ("GETINFO".equals(cmd)) {
+            String[] infoArgs = args.split(",", 2);
+            if (infoArgs.length == 2) {
+                String key = infoArgs[0].trim().toUpperCase(Locale.ROOT);
+                if ("VERSION_PLC".equals(key)) plcVersion = infoArgs[1].trim();
+                if ("IPADDR".equals(key)) plcIp = infoArgs[1].trim();
+            }
+            nextCommand.run();
+        } else if ("LIST".equals(cmd)) {
+            processListLine(commandConsumer, args);
+        } else if ("DIFF".equals(cmd) || "GET".equals(cmd)) {
+            try {
+                String[] diffArgs = args.split(",", 2);
+                if (diffArgs.length != 2) {
+                    LOGGER.info("DIFF/GET command must have two arguments: {}", args);
+                    return;
+                }
+                diffConsumer.accept(new PlccomsDiff(diffArgs[0].trim(), diffArgs[1].trim()));
+                LOGGER.trace("Received PLCComS: {} : {}", diffArgs[0], diffArgs[1]);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to process DIFF/GET command: {}", args, e);
+            }
+        } else if ("ERROR".equals(cmd) || "WARNING".equals(cmd)) {
+            LOGGER.warn("PLCComS {}: {}", cmd, args);
+        } else {
+            LOGGER.info("Unexpected command received: {}", line);
+        }
     }
 
     void initializeConnection(Consumer<String> commandConsumer, boolean haDiscovery) {
@@ -116,11 +134,11 @@ public class PlccomsClient {
 
     void processListLine(Consumer<String> commandConsumer, String args) {
         if (!args.isBlank()) {
-            Matcher matcher = LIST_CMD_PATTERN.matcher(args);
-            if (matcher.matches()) {
-                vars.add(new PlccomsVar(matcher.group(1), matcher.group(2)));
+            String[] listArgs = args.split(",", 2);
+            if (listArgs.length == 2 && !listArgs[0].isBlank() && !listArgs[1].isBlank()) {
+                vars.add(new PlccomsVar(listArgs[0].trim(), listArgs[1].trim()));
             } else {
-                LOGGER.error("LIST args \"{}\" did not match {}", args, LIST_CMD_PATTERN);
+                LOGGER.error("Invalid LIST args: {}", args);
             }
             return;
         }
@@ -144,5 +162,9 @@ public class PlccomsClient {
     public void close() {
         telnetClient.close();
     }
+
+    public String getPlcVersion() { return plcVersion; }
+
+    public String getPlcIp() { return plcIp; }
 
 }

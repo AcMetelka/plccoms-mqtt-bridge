@@ -7,7 +7,7 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.util.Collection;
 
-public class Mqtt {
+public class Mqtt implements MqttGateway {
 
     private static final Logger LOGGER = LogManager.getLogger();
 
@@ -52,10 +52,10 @@ public class Mqtt {
         client.publish(topic, msg);
     }
 
-    public void subscribe(Collection<String> topicFilters, IMqttMessageListener listener) throws MqttException {
+    public void subscribe(Collection<String> topicFilters, MessageHandler handler) throws MqttException {
         for (String topicFilter : topicFilters) {
             LOGGER.info("Subscribing to topic {}", topicFilter);
-            client.subscribe(topicFilter, listener);
+            client.subscribe(topicFilter, (topic, message) -> handler.onMessage(topic, message.getPayload()));
         }
     }
 }
