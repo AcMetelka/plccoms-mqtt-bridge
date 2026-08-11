@@ -18,6 +18,12 @@ public class MqttConfigTest {
     public void empty() throws IOException {
         var mqttConfig = MAPPER.readValue("{}", MqttConfig.class);
         Assert.assertNotNull(mqttConfig.clientId);
+        Assert.assertTrue(mqttConfig.watchdogEnabled);
+        Assert.assertEquals(30, mqttConfig.watchdogIntervalSeconds);
+        Assert.assertEquals(10, mqttConfig.watchdogTimeoutSeconds);
+        Assert.assertEquals(3, mqttConfig.watchdogFailureThreshold);
+        Assert.assertEquals(60, mqttConfig.reconnectCooldownSeconds);
+        Assert.assertTrue(mqttConfig.availabilityTopic.endsWith("/mqtt-availability"));
     }
 
     @Test

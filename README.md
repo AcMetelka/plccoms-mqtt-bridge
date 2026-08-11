@@ -129,6 +129,25 @@ port     | 1883 for tcp and 8883 fot tls | MQTT TCP port
 username | N/A            | optional parameter
 password | N/A            | optional parameter
 clientId | MQTT client id | random UUID 
+watchdog-enabled | Enable MQTT publish/subscribe round-trip monitoring | true
+watchdog-interval-seconds | Interval between MQTT transport probes | 30
+watchdog-timeout-seconds | Maximum wait for the probe message | 10
+watchdog-failure-threshold | Consecutive failures before client recreation | 3
+reconnect-cooldown-seconds | Minimum delay between forced client recreations | 60
+availability-topic | Retained MQTT transport availability topic | `plccoms-mqtt-bridge/<clientId>/mqtt-availability`
+
+The availability topic reports only the MQTT transport state (`online` or
+`offline`); it does not assert that PLCComS or the PLC is healthy. The client
+uses a retained Last Will with value `offline`. The watchdog subscribes to
+`<availability-topic>/probe` and periodically performs a non-retained QoS 1
+round trip. Broker ACLs must allow the configured client to publish and
+subscribe to both topics.
+
+`cleanSession=true` is intentionally retained. Command subscriptions are kept
+in a thread-safe local registry and restored after every initial connection and
+automatic reconnect. A stable configured `clientId` is recommended for clear
+broker logs and stable health topic names, but no persistent broker session is
+required.
  
 #### var-blacklist:
 
@@ -153,6 +172,27 @@ log-level      | info           | Log4Jv2 log levels (info, debug, trace)
 ```bash
 ./gradlew clean runLocal
 ```
+
+### Manually verify MQTT lifecycle recovery
+
+1. Start the bridge, broker and PLCComS, then wait for the availability topic
+   to become retained `online`. Confirm the log reports the command topic
+   subscription and successful watchdog round trips.
+2. Restart the MQTT broker. Confirm `connectionLost`, followed by
+   `connectComplete` and restoration of every command subscription. Publish one
+   command once (for example `mosquitto_pub -q 1 -t home/light/relay-set -m ON`)
+   and verify the PLCComS log or capture contains exactly one corresponding
+   `SET` command.
+3. Repeat with a short network interruption (for example temporarily block the
+   broker port for longer than one keep-alive interval), then restore the
+   network. Again publish one command and verify exactly one PLC `SET`.
+4. To exercise forced recovery, block only the probe topic using broker ACLs or
+   drop its messages. After `watchdog-failure-threshold` timeouts, verify one
+   client recreation, then verify that further attempts respect
+   `reconnect-cooldown-seconds` rather than forming a reconnect storm.
+
+Application state/discovery publications retain their existing QoS 0 and
+retained behavior; command subscriptions retain their existing QoS 0 behavior.
 
 ### Build and run in container
 
