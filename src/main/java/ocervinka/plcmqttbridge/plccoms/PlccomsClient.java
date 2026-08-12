@@ -23,6 +23,7 @@ public class PlccomsClient implements PlcGateway {
 
     private Collection<PlccomsVar> vars = new ArrayList<>();
     private final Queue<String> connectCommandQueue = new LinkedList<>();
+    private boolean publicFileReloadInProgress;
 
     public String plcVersion, plcIp;
 
@@ -112,6 +113,10 @@ public class PlccomsClient implements PlcGateway {
             }
         } else if ("ERROR".equals(cmd) || "WARNING".equals(cmd)) {
             LOGGER.warn("PLCComS {}: {}", cmd, args);
+            if ("WARNING".equals(cmd)
+                    && args.toUpperCase(Locale.ROOT).startsWith("250 CHANGED PUBLIC FILE:")) {
+                reloadPublicFile(commandConsumer);
+            }
         } else {
             LOGGER.info("Unexpected command received: {}", line);
         }
@@ -120,6 +125,7 @@ public class PlccomsClient implements PlcGateway {
     void initializeConnection(Consumer<String> commandConsumer, boolean haDiscovery) {
         connectCommandQueue.clear();
         vars = new ArrayList<>();
+        publicFileReloadInProgress = false;
 
         if (haDiscovery) {
             connectCommandQueue.add("GETINFO:version_plc");
@@ -143,6 +149,7 @@ public class PlccomsClient implements PlcGateway {
             return;
         }
 
+        publicFileReloadInProgress = false;
         Collection<PlccomsVar> varsToSubscribe = listConsumer.apply(vars);
         for (PlccomsVar var : varsToSubscribe) {
             if (var.delta == null) {
@@ -152,6 +159,19 @@ public class PlccomsClient implements PlcGateway {
             }
             commandConsumer.accept("GET:" + var.name);
         }
+    }
+
+    private void reloadPublicFile(Consumer<String> commandConsumer) {
+        if (publicFileReloadInProgress) {
+            LOGGER.info("PLCComS public file reload is already in progress");
+            return;
+        }
+
+        LOGGER.info("PLCComS public file changed; refreshing LIST and variable subscriptions");
+        publicFileReloadInProgress = true;
+        connectCommandQueue.clear();
+        vars = new ArrayList<>();
+        commandConsumer.accept("LIST:");
     }
 
     public void setVar(String name, Object value) {

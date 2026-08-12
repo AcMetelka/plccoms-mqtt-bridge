@@ -109,6 +109,29 @@ public class PlccomsClientTest {
         assertEquals(0, calls.get());
     }
 
+    @Test
+    public void changedPublicFileRefreshesListAndSubscriptionsOnce() {
+        AtomicInteger listCalls = new AtomicInteger();
+        PlccomsClient client = new PlccomsClient(vars -> {
+            listCalls.incrementAndGet();
+            return vars;
+        }, diff -> { });
+        List<String> commands = new ArrayList<>();
+
+        client.processLine(commands::add,
+                "WARNING: 250 Changed public file: '//RD_NJ_ST.pub'", () -> { });
+        client.processLine(commands::add,
+                "WARNING: 250 Changed public file: '//RD_NJ_ST.pub'", () -> { });
+
+        assertEquals(List.of("LIST:"), commands);
+
+        client.processLine(commands::add, "LIST:TEMPERATURE,REAL", () -> { });
+        client.processLine(commands::add, "LIST:", () -> { });
+
+        assertEquals(1, listCalls.get());
+        assertEquals(List.of("LIST:", "EN:TEMPERATURE", "GET:TEMPERATURE"), commands);
+    }
+
     private static List<String> names(Collection<PlccomsVar> vars) {
         List<String> names = new ArrayList<>();
         for (PlccomsVar var : vars) {

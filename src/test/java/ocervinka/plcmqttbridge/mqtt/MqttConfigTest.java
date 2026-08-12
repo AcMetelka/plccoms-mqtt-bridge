@@ -23,7 +23,14 @@ public class MqttConfigTest {
         Assert.assertEquals(10, mqttConfig.watchdogTimeoutSeconds);
         Assert.assertEquals(3, mqttConfig.watchdogFailureThreshold);
         Assert.assertEquals(60, mqttConfig.reconnectCooldownSeconds);
-        Assert.assertTrue(mqttConfig.availabilityTopic.endsWith("/mqtt-availability"));
+        Assert.assertEquals("plccoms-mqtt-bridge/mqtt-availability", mqttConfig.availabilityTopic);
+    }
+
+    @Test
+    public void withExplicitAvailabilityTopic() throws IOException {
+        var mqttConfig = MAPPER.readValue(
+                "{\"availability-topic\":\"custom/bridge/availability\"}", MqttConfig.class);
+        Assert.assertEquals("custom/bridge/availability", mqttConfig.availabilityTopic);
     }
 
     @Test

@@ -134,7 +134,7 @@ watchdog-interval-seconds | Interval between MQTT transport probes | 30
 watchdog-timeout-seconds | Maximum wait for the probe message | 10
 watchdog-failure-threshold | Consecutive failures before client recreation | 3
 reconnect-cooldown-seconds | Minimum delay between forced client recreations | 60
-availability-topic | Retained MQTT transport availability topic | `plccoms-mqtt-bridge/<clientId>/mqtt-availability`
+availability-topic | Retained MQTT transport availability topic | `plccoms-mqtt-bridge/mqtt-availability`
 
 The availability topic reports only the MQTT transport state (`online` or
 `offline`); it does not assert that PLCComS or the PLC is healthy. The client
@@ -146,8 +146,8 @@ subscribe to both topics.
 `cleanSession=true` is intentionally retained. Command subscriptions are kept
 in a thread-safe local registry and restored after every initial connection and
 automatic reconnect. A stable configured `clientId` is recommended for clear
-broker logs and stable health topic names, but no persistent broker session is
-required.
+broker logs, but no persistent broker session is required. Configure a unique
+`availability-topic` explicitly when multiple bridge instances share a broker.
  
 #### var-blacklist:
 

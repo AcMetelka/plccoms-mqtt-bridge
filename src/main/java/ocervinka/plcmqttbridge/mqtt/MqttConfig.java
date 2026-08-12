@@ -61,16 +61,12 @@ public class MqttConfig {
         this.watchdogFailureThreshold = positiveOrDefault(watchdogFailureThreshold, 3);
         this.reconnectCooldownSeconds = positiveOrDefault(reconnectCooldownSeconds, 60);
         this.availabilityTopic = availabilityTopic == null
-                ? "plccoms-mqtt-bridge/" + sanitizeTopicLevel(this.clientId) + "/mqtt-availability"
+                ? "plccoms-mqtt-bridge/mqtt-availability"
                 : availabilityTopic;
     }
 
     private static int positiveOrDefault(Integer value, int defaultValue) {
         return value == null ? defaultValue : Math.max(1, value);
-    }
-
-    private static String sanitizeTopicLevel(String value) {
-        return value.replace('+', '_').replace('#', '_').replace('/', '_');
     }
 
     public String getUri() {
