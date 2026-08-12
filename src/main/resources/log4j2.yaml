@@ -6,7 +6,8 @@ Configutation:
       name: console_appender
       target: SYSTEM_OUT
       PatternLayout:
-        pattern: "%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'} %-6p %c{1.} [%t] %m%n"
+#        pattern: "%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'} %-6p %c{1.} [%t] %m%n"
+        pattern: "%d{yy-MM-dd HH:mm:ss.SSS} %level{length=1} %m%n"
 
   Loggers:
     Root:
