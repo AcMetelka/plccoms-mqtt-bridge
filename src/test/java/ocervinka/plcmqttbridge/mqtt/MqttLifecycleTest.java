@@ -5,6 +5,7 @@ import org.junit.Test;
 
 import java.util.*;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.Assert.*;
@@ -17,9 +18,17 @@ public class MqttLifecycleTest {
 
         assertEquals(1, fixture.client.subscribeCount("home/light/set"));
         fixture.client.callback.connectionLost(new RuntimeException("network"));
+        fixture.client.insidePahoCallback = true;
         fixture.client.callback.connectComplete(true, "tcp://broker:1883");
+        fixture.client.insidePahoCallback = false;
+        fixture.awaitLifecycle();
 
         assertEquals(2, fixture.client.subscribeCount("home/light/set"));
+        assertFalse("subscribe must not execute on the Paho callback thread",
+                fixture.client.subscribeCalledInsidePahoCallback);
+        assertTrue(fixture.client.published.stream().anyMatch(p ->
+                p.topic.equals("bridge-test/mqtt-availability")
+                        && new String(p.message.getPayload()).equals("online")));
         fixture.close();
     }
 
@@ -87,8 +96,12 @@ public class MqttLifecycleTest {
         Fixture(MqttConfig config) throws Exception {
             mqtt.connect(config);
             client = factory.created.get(0);
+            awaitLifecycle();
         }
 
+        void awaitLifecycle() throws Exception {
+            executor.submit(() -> { }).get(2, TimeUnit.SECONDS);
+        }
         void close() throws Exception { mqtt.close(); }
     }
 
@@ -106,6 +119,8 @@ public class MqttLifecycleTest {
         MqttCallbackExtended callback;
         boolean connected;
         boolean echoPublishes;
+        boolean insidePahoCallback;
+        boolean subscribeCalledInsidePahoCallback;
         final Map<String, IMqttMessageListener> listeners = new HashMap<>();
         final Map<String, Integer> subscriptions = new HashMap<>();
         final List<Published> published = new ArrayList<>();
@@ -129,6 +144,7 @@ public class MqttLifecycleTest {
             }
         }
         public void subscribe(String topic, int qos, IMqttMessageListener listener) {
+            subscribeCalledInsidePahoCallback |= insidePahoCallback;
             listeners.put(topic, listener);
             subscriptions.put(topic, subscribeCount(topic) + 1);
         }

@@ -82,7 +82,11 @@ public class Mqtt implements MqttGateway {
     private MqttCallbackExtended callbackFor(MqttClientFacade callbackClient) {
         return new MqttCallbackExtended() {
             public void connectComplete(boolean reconnect, String serverURI) {
-                onConnectComplete(callbackClient, reconnect, serverURI);
+                // Paho invokes this on its callback thread. Synchronous subscribe() waits for
+                // SUBACK and must not run here, otherwise a sufficiently large registry can
+                // block the very receive path which processes those acknowledgements.
+                connected = false;
+                watchdogExecutor.execute(() -> onConnectComplete(callbackClient, reconnect, serverURI));
             }
             public void connectionLost(Throwable cause) {
                 if (client != callbackClient) return;
@@ -97,20 +101,24 @@ public class Mqtt implements MqttGateway {
     private void onConnectComplete(MqttClientFacade callbackClient, boolean reconnect, String serverURI) {
         synchronized (lifecycleLock) {
             if (closing || client != callbackClient) return;
-            connected = true;
+            connected = false;
             pendingProbe = null;
             consecutiveProbeFailures = 0;
             LOGGER.info("MQTT connection complete (reconnect={}, server={}); restoring {} subscription(s)",
                     reconnect, serverURI, subscriptions.size());
             for (Map.Entry<String, MessageHandler> entry : subscriptions.entrySet()) {
-                subscribeNow(callbackClient, entry.getKey(), entry.getValue(), 0);
+                if (!subscribeNow(callbackClient, entry.getKey(), entry.getValue(), 0)) return;
             }
             if (config.watchdogEnabled) {
-                subscribeNow(callbackClient, probeTopic(), this::onProbeMessage, 1);
+                if (!subscribeNow(callbackClient, probeTopic(), this::onProbeMessage, 1)) return;
             }
             try {
                 publishMessage(callbackClient, config.availabilityTopic, "online", 1, true);
+                connected = true;
+                LOGGER.info("MQTT lifecycle ready; {} application subscription(s) restored",
+                        subscriptions.size());
             } catch (MqttException e) {
+                connected = false;
                 LOGGER.error("Failed to publish MQTT transport availability", e);
             }
         }
@@ -157,13 +165,15 @@ public class Mqtt implements MqttGateway {
         }
     }
 
-    private void subscribeNow(MqttClientFacade target, String topic, MessageHandler handler, int qos) {
+    private boolean subscribeNow(MqttClientFacade target, String topic, MessageHandler handler, int qos) {
         try {
             LOGGER.info("Subscribing to MQTT topic {} (QoS {})", topic, qos);
             target.subscribe(topic, qos, (actualTopic, message) -> handler.onMessage(actualTopic, message.getPayload()));
+            return true;
         } catch (MqttException e) {
             connected = false;
             LOGGER.error("Failed to subscribe to MQTT topic {}; watchdog will recover the client", topic, e);
+            return false;
         }
     }
 
