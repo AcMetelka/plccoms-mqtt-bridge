@@ -10,6 +10,8 @@ import ocervinka.plcmqttbridge.functions.OnToOne;
 import ocervinka.plcmqttbridge.functions.OneToOn;
 import ocervinka.plcmqttbridge.functions.EnumToOptions;
 import ocervinka.plcmqttbridge.functions.OptionsToEnum;
+import ocervinka.plcmqttbridge.functions.TimeToTod;
+import ocervinka.plcmqttbridge.functions.TodToTime;
 import org.apache.logging.log4j.Level;
 
 import java.text.MessageFormat;
@@ -23,6 +25,8 @@ public class VarMappingConfig {
     private static final Function<String, String> NOOP = new Noop();
     private static final Function<String, String> ONE_TO_ON = new OneToOn();
     private static final Function<String, String> ON_TO_ONE = new OnToOne();
+    private static final Function<String, String> TOD_TO_TIME = new TodToTime();
+    private static final Function<String, String> TIME_TO_TOD = new TimeToTod();
 
     public final Pattern varPattern;
     public final Double varDelta;
@@ -92,6 +96,10 @@ public class VarMappingConfig {
             return ONE_TO_ON;
         } else if ("OnToOne".equals(functionName)) {
             return ON_TO_ONE;
+        } else if ("TodToTime".equals(functionName)) {
+            return TOD_TO_TIME;
+        } else if ("TimeToTod".equals(functionName)) {
+            return TIME_TO_TOD;
         } else {
             throw new IllegalArgumentException("Unknown converter " + functionName);
         }

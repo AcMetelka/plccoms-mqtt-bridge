@@ -36,6 +36,25 @@ public class HomeAssistantDiscoveryPublisherTest {
         assertEquals("192.0.2.1", payload.get("device").get("cns").get(0).get(1).asText());
     }
 
+    @Test
+    public void buildsTimeEntity() throws Exception {
+        MqttHaDiscoveryConfig config = new MqttHaDiscoveryConfig("true", "homeassistant", "plc", "Main PLC", "Foxtrot");
+        HomeAssistantDiscoveryPublisher publisher = new HomeAssistantDiscoveryPublisher(new NoopMqtt(), config);
+        VarMappingConfig mappingConfig = new VarMappingConfig("IRIGTIME", null, "irrigation/time", "TodToTime",
+                null, "irrigation/time/set", "TimeToTod", null, "Irrigation time", "time",
+                null, null, null, null, null, null, null);
+        VarMapping mapping = new VarMapping(mappingConfig, "IRIGTIME", "irrigation/time", "irrigation/time/set",
+                false, "Irrigation time", "time", null, null, null, null, null);
+
+        HomeAssistantDiscoveryPublisher.DiscoveryMessage message = publisher.build(
+                "IRIGTIME", mapping, "6.2", "192.0.2.1");
+        JsonNode payload = new ObjectMapper().readTree(message.payload);
+
+        assertEquals("homeassistant/time/plc/irigtime/config", message.topic);
+        assertEquals("irrigation/time", payload.get("state_topic").asText());
+        assertEquals("irrigation/time/set", payload.get("command_topic").asText());
+    }
+
     static VarMappingConfig mappingConfig(String var, String stateTopic, String cmdTopic, String haName) {
         return new VarMappingConfig(var, null, stateTopic, null, null, cmdTopic, null, null,
                 haName, null, "temperature", "°C", null, -10.0, 40.0, 0.5, null);
