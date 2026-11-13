@@ -50,7 +50,7 @@ public class PlcMqttBridgeTest {
         Config defaults = config();
         VarMappingConfig command = new ObjectMapper(new YAMLFactory()).readValue(
                 "var: FVEPWRSOURCE.(.*)SWITCH\n"
-                        + "state-topic: plc-fve/src-switch/{1}switch/set\nno-retain: true\n",
+                        + "state-topic: plc-fve/src-switch/{1}switch/set\nmqtt-retain: false\n",
                 VarMappingConfig.class);
         new PlcMqttBridge(new Config(defaults.plccoms, defaults.mqtt, null,
                 new VarMappingConfig[]{command, defaults.varMappings[0]}), mqtt, plc).connect();
@@ -86,6 +86,15 @@ public class PlcMqttBridgeTest {
         assertEquals(2, mqtt.nonRetained.size());
         plc.diffListener.accept(new PlccomsDiff(ds, "SRCGRID"));
         assertEquals("plc-fve/src-switch/dsinvswitch/set=SRCGRID", mqtt.nonRetained.get(2));
+    }
+
+    @Test
+    public void mqttRetainDefaultsToTrue() throws Exception {
+        ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
+        String mapping = "var: Room.Text\nstate-topic: state/room.text\n";
+        assertTrue(yaml.readValue(mapping, VarMappingConfig.class).mqttRetain);
+        assertTrue(yaml.readValue(mapping + "mqtt-retain: true\n",
+                VarMappingConfig.class).mqttRetain);
     }
 
     private static Config config() {

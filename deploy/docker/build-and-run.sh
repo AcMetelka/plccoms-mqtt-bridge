@@ -5,20 +5,35 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 
-JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-11-openjdk-arm64}
+DEFAULT_JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
 IMAGE_NAME=${IMAGE_NAME:-ocervinka/plccoms-mqtt-bridge:latest}
 CONTAINER_NAME=${CONTAINER_NAME:-plccoms-mqtt-bridge}
 CONFIG_FILE=${CONFIG_FILE:-$PROJECT_DIR/deploy/docker/config.yaml}
 CONFIG_TARGET=/etc/plccoms-mqtt-bridge/config.yaml
 
-export JAVA_HOME
-export PATH="$JAVA_HOME/bin:$PATH"
+is_jdk11() {
+    [ -x "$1/bin/java" ] && [ -x "$1/bin/javac" ] || return 1
+    java_version=$("$1/bin/java" -version 2>&1) || return 1
+    case "$java_version" in
+        *\"11.*|*\"11\"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
-if [ ! -x "$JAVA_HOME/bin/java" ]; then
-    echo "Java was not found at $JAVA_HOME/bin/java" >&2
-    echo "Set JAVA_HOME to the installed JDK 11 directory." >&2
+if [ -z "${JAVA_HOME:-}" ]; then
+    JAVA_HOME=$DEFAULT_JAVA_HOME
+elif ! is_jdk11 "$JAVA_HOME"; then
+    echo "Ignoring JAVA_HOME without a working JDK 11: $JAVA_HOME" >&2
+    JAVA_HOME=$DEFAULT_JAVA_HOME
+fi
+
+if ! is_jdk11 "$JAVA_HOME"; then
+    echo "JDK 11 was not found at $JAVA_HOME. Set JAVA_HOME to an installed JDK 11." >&2
     exit 1
 fi
+
+export JAVA_HOME
+export PATH="$JAVA_HOME/bin:$PATH"
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "Docker was not found in PATH." >&2

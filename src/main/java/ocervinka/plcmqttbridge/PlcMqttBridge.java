@@ -181,7 +181,7 @@ public class PlcMqttBridge {
             return;
         }
 
-        if (varMapping.config.noRetain) {
+        if (!varMapping.config.mqttRetain) {
             String previousValue = varMapping.lastPlcValue;
             if (diff.snapshot) {
                 varMapping.lastPlcValue = diff.value;
@@ -207,7 +207,7 @@ public class PlcMqttBridge {
         }
 
         try {
-            mqttClient.publish(varMapping.stateTopic, convertedValue, !varMapping.config.noRetain);
+            mqttClient.publish(varMapping.stateTopic, convertedValue, varMapping.config.mqttRetain);
         } catch (Exception e) {
             LOGGER.error("Failed to publish to {}", varMapping.stateTopic, e);
         }

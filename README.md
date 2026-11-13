@@ -161,6 +161,7 @@ Field          | Default value  | Description
 ---------------| ---------------|------------------------
 var            | N/A (required) | Regular expression matching PLC variable(s).
 state-topic    | N/A (required) | MQTT topic used by `plccoms-mqtt-bridge` to publish PLC variable changes. The topic name can include {index} to refer to (one-based) capturing group or {0} to refer to a full match.  
+mqtt-retain    | true           | Set to false to publish only PLC value changes after initialization, without MQTT retain.
 state-function | Noop           | A function to convert value from PLC before it is published to topic (Noop, OneToOn, OnToOne, TodToTime)
 cmd-topic      | N/A            | MQTT topic `plccoms-mqtt-bridge` subscribes to and forwards messages to PLC. The topic name can include {index} to refer to (one-based) capturing group or {0} to refer to a full match.
 cmd-function   | Noop           | A function to convert value read from topic before it is sent to PLC. (Noop, OneToOn, OnToOne, TimeToTod)

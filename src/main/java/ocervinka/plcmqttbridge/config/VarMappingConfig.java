@@ -36,7 +36,7 @@ public class VarMappingConfig {
     public final MessageFormat cmdTopic;
     public final Function<String, String> cmdFunction;
     public final boolean mqttToPlcOnly;
-    public final boolean noRetain;
+    public final boolean mqttRetain;
     public final MessageFormat haName;
     public final MessageFormat haComponent;
     public final MessageFormat haDeviceClass;
@@ -68,7 +68,7 @@ public class VarMappingConfig {
             @JsonProperty("ha-number-max") Double haNumberMax,
             @JsonProperty("ha-number-step") Double haNumberStep,
             @JsonProperty("log-level") String logLevel,
-            @JsonProperty("no-retain") boolean noRetain)
+            @JsonProperty("mqtt-retain") Boolean mqttRetain)
     {
         this.varPattern = Pattern.compile(var);
         this.varDelta = varDelta;
@@ -88,7 +88,7 @@ public class VarMappingConfig {
         this.haNumberMin = haNumberMin;
         this.haNumberMax = haNumberMax;
         this.haNumberStep = haNumberStep;
-        this.noRetain = noRetain;
+        this.mqttRetain = mqttRetain == null || mqttRetain;
         this.logLevel = Level.toLevel(logLevel, Level.INFO);
     }
 
