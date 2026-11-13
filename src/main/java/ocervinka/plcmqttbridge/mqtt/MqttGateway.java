@@ -10,6 +10,9 @@ public interface MqttGateway {
 
     void connect(MqttConfig config) throws Exception;
     void close() throws Exception;
-    void publish(String topic, String value) throws Exception;
+    default void publish(String topic, String value) throws Exception {
+        publish(topic, value, true);
+    }
+    void publish(String topic, String value, boolean retained) throws Exception;
     void subscribe(Collection<String> topicFilters, MessageHandler handler) throws Exception;
 }

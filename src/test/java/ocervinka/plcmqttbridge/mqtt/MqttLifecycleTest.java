@@ -33,6 +33,24 @@ public class MqttLifecycleTest {
     }
 
     @Test
+    public void applicationPublishUsesQosZeroAndRequestedRetainFlag() throws Exception {
+        Fixture fixture = new Fixture(config(3, 60));
+        try {
+            fixture.client.published.clear();
+            fixture.mqtt.publish("state", "ON");
+            fixture.mqtt.publish("command", "SRCINV", false);
+
+            assertEquals(2, fixture.client.published.size());
+            assertEquals(0, fixture.client.published.get(0).message.getQos());
+            assertTrue(fixture.client.published.get(0).message.isRetained());
+            assertEquals(0, fixture.client.published.get(1).message.getQos());
+            assertFalse(fixture.client.published.get(1).message.isRetained());
+        } finally {
+            fixture.close();
+        }
+    }
+
+    @Test
     public void publishWhileDisconnectedFailsExplicitly() throws Exception {
         Fixture fixture = new Fixture(config(3, 60));
         fixture.client.connected = false;

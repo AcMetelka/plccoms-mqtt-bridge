@@ -145,14 +145,14 @@ public class Mqtt implements MqttGateway {
         }
     }
 
-    public void publish(String topic, String value) throws MqttException {
+    public void publish(String topic, String value, boolean retained) throws MqttException {
         MqttClientFacade current = client;
         if (!connected || current == null || !current.isConnected()) {
             MqttException error = new MqttException(MqttException.REASON_CODE_CLIENT_NOT_CONNECTED);
             LOGGER.error("Refusing MQTT publish to {} because the transport is disconnected", topic, error);
             throw error;
         }
-        publishMessage(current, topic, value, 0, true);
+        publishMessage(current, topic, value, 0, retained);
     }
 
     public void subscribe(Collection<String> topicFilters, MessageHandler handler) throws MqttException {

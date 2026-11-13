@@ -42,7 +42,7 @@ public class HomeAssistantDiscoveryPublisherTest {
         HomeAssistantDiscoveryPublisher publisher = new HomeAssistantDiscoveryPublisher(new NoopMqtt(), config);
         VarMappingConfig mappingConfig = new VarMappingConfig("IRIGTIME", null, "irrigation/time", "TodToTime",
                 null, "irrigation/time/set", "TimeToTod", null, "Irrigation time", "time",
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, false);
         VarMapping mapping = new VarMapping(mappingConfig, "IRIGTIME", "irrigation/time", "irrigation/time/set",
                 false, "Irrigation time", "time", null, null, null, null, null);
 
@@ -57,13 +57,13 @@ public class HomeAssistantDiscoveryPublisherTest {
 
     static VarMappingConfig mappingConfig(String var, String stateTopic, String cmdTopic, String haName) {
         return new VarMappingConfig(var, null, stateTopic, null, null, cmdTopic, null, null,
-                haName, null, "temperature", "°C", null, -10.0, 40.0, 0.5, null);
+                haName, null, "temperature", "°C", null, -10.0, 40.0, 0.5, null, false);
     }
 
     private static class NoopMqtt implements MqttGateway {
         public void connect(MqttConfig config) { }
         public void close() { }
-        public void publish(String topic, String value) { }
+        public void publish(String topic, String value, boolean retained) { }
         public void subscribe(Collection<String> topics, MessageHandler handler) { }
     }
 }

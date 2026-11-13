@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class PlccomsClientTest {
 
@@ -34,10 +36,11 @@ public class PlccomsClientTest {
     @Test
     public void reconnectStartsWithFreshListVariables() {
         List<List<String>> consumedNames = new ArrayList<>();
+        List<Boolean> snapshots = new ArrayList<>();
         PlccomsClient client = new PlccomsClient(vars -> {
             consumedNames.add(names(vars));
             return vars;
-        }, diff -> { });
+        }, diff -> snapshots.add(diff.snapshot));
         List<String> commands = new ArrayList<>();
 
         client.initializeConnection(commands::add, false);
@@ -45,9 +48,13 @@ public class PlccomsClientTest {
         client.processListLine(commands::add, "");
 
         client.initializeConnection(commands::add, false);
+        client.processLine(commands::add, "DIFF:OLD_VAR,1", () -> { });
         client.processListLine(commands::add, "NEW_VAR,BOOL");
         client.processListLine(commands::add, "");
 
+        client.processLine(commands::add, "GET:NEW_VAR,1", () -> { });
+        client.processLine(commands::add, "DIFF:NEW_VAR,0", () -> { });
+        assertEquals(List.of(true, true, false), snapshots);
         assertEquals(List.of(List.of("OLD_VAR"), List.of("NEW_VAR")), consumedNames);
     }
 
@@ -71,6 +78,11 @@ public class PlccomsClientTest {
 
         assertEquals("Text.Value", received.get().name);
         assertEquals("lowerCase,with:colon", received.get().value);
+        assertFalse(received.get().snapshot);
+
+        client.processLine(command -> { }, "GeT:Text.Value,SRCINV", () -> { });
+        assertEquals("SRCINV", received.get().value);
+        assertTrue(received.get().snapshot);
     }
 
     @Test
@@ -112,10 +124,11 @@ public class PlccomsClientTest {
     @Test
     public void changedPublicFileRefreshesListAndSubscriptionsOnce() {
         AtomicInteger listCalls = new AtomicInteger();
+        List<Boolean> snapshots = new ArrayList<>();
         PlccomsClient client = new PlccomsClient(vars -> {
             listCalls.incrementAndGet();
             return vars;
-        }, diff -> { });
+        }, diff -> snapshots.add(diff.snapshot));
         List<String> commands = new ArrayList<>();
 
         client.processLine(commands::add,
@@ -125,9 +138,13 @@ public class PlccomsClientTest {
 
         assertEquals(List.of("LIST:"), commands);
 
+        client.processLine(commands::add, "DIFF:TEMPERATURE,10", () -> { });
         client.processLine(commands::add, "LIST:TEMPERATURE,REAL", () -> { });
         client.processLine(commands::add, "LIST:", () -> { });
 
+        client.processLine(commands::add, "GET:TEMPERATURE,10", () -> { });
+        client.processLine(commands::add, "DIFF:TEMPERATURE,11", () -> { });
+        assertEquals(List.of(true, true, false), snapshots);
         assertEquals(1, listCalls.get());
         assertEquals(List.of("LIST:", "EN:TEMPERATURE", "GET:TEMPERATURE"), commands);
     }

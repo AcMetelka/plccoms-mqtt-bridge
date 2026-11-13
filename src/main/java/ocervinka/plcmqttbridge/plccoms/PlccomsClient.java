@@ -23,7 +23,7 @@ public class PlccomsClient implements PlcGateway {
 
     private Collection<PlccomsVar> vars = new ArrayList<>();
     private final Queue<String> connectCommandQueue = new LinkedList<>();
-    private boolean publicFileReloadInProgress;
+    private boolean listing;
 
     public String plcVersion, plcIp;
 
@@ -106,7 +106,7 @@ public class PlccomsClient implements PlcGateway {
                     LOGGER.info("DIFF/GET command must have two arguments: {}", args);
                     return;
                 }
-                diffConsumer.accept(new PlccomsDiff(diffArgs[0].trim(), diffArgs[1].trim()));
+                diffConsumer.accept(new PlccomsDiff(diffArgs[0].trim(), diffArgs[1].trim(), listing || "GET".equals(cmd)));
                 LOGGER.trace("Received PLCComS: {} : {}", diffArgs[0], diffArgs[1]);
             } catch (Exception e) {
                 LOGGER.warn("Failed to process DIFF/GET command: {}", args, e);
@@ -125,7 +125,7 @@ public class PlccomsClient implements PlcGateway {
     void initializeConnection(Consumer<String> commandConsumer, boolean haDiscovery) {
         connectCommandQueue.clear();
         vars = new ArrayList<>();
-        publicFileReloadInProgress = false;
+        listing = true;
 
         if (haDiscovery) {
             connectCommandQueue.add("GETINFO:version_plc");
@@ -149,7 +149,7 @@ public class PlccomsClient implements PlcGateway {
             return;
         }
 
-        publicFileReloadInProgress = false;
+        listing = false;
         Collection<PlccomsVar> varsToSubscribe = listConsumer.apply(vars);
         for (PlccomsVar var : varsToSubscribe) {
             if (var.delta == null) {
@@ -162,13 +162,13 @@ public class PlccomsClient implements PlcGateway {
     }
 
     private void reloadPublicFile(Consumer<String> commandConsumer) {
-        if (publicFileReloadInProgress) {
+        if (listing) {
             LOGGER.info("PLCComS public file reload is already in progress");
             return;
         }
 
         LOGGER.info("PLCComS public file changed; refreshing LIST and variable subscriptions");
-        publicFileReloadInProgress = true;
+        listing = true;
         connectCommandQueue.clear();
         vars = new ArrayList<>();
         commandConsumer.accept("LIST:");

@@ -5,6 +5,7 @@ import ocervinka.plcmqttbridge.config.VarMappingConfig;
 public class VarMapping {
 
     public final VarMappingConfig config;
+    String lastPlcValue;
 
     // PLC variable name
     public final String varName;

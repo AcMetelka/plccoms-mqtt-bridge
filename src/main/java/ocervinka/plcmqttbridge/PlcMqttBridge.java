@@ -78,6 +78,7 @@ public class PlcMqttBridge {
     }
 
     private Collection<PlccomsVar> onList(Collection<PlccomsVar> listedVars) {
+        varMappingsByVariable.clear();
         int blacklistedCount = 0;
         Map<String, Integer> blacklistedCountByPattern = new HashMap<>();
         List<String> unmappedVars = new ArrayList<>();
@@ -180,6 +181,18 @@ public class PlcMqttBridge {
             return;
         }
 
+        if (varMapping.config.noRetain) {
+            String previousValue = varMapping.lastPlcValue;
+            if (diff.snapshot) {
+                varMapping.lastPlcValue = diff.value;
+                return;
+            }
+            // EN precedes GET. Wait for the snapshot and ignore matching DIFFs.
+            if (previousValue == null || previousValue.equals(diff.value)) return;
+            // Consume the change even if MQTT is offline, so it cannot be replayed.
+            varMapping.lastPlcValue = diff.value;
+        }
+
         String convertedValue;
         try {
             convertedValue = varMapping.config.stateFunction.apply(diff.value); // OneToOn, OnToOne
@@ -194,7 +207,7 @@ public class PlcMqttBridge {
         }
 
         try {
-            mqttClient.publish(varMapping.stateTopic, convertedValue);
+            mqttClient.publish(varMapping.stateTopic, convertedValue, !varMapping.config.noRetain);
         } catch (Exception e) {
             LOGGER.error("Failed to publish to {}", varMapping.stateTopic, e);
         }

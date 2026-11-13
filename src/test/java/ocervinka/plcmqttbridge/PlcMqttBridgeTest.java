@@ -1,5 +1,7 @@
 package ocervinka.plcmqttbridge;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import ocervinka.plcmqttbridge.config.Config;
 import ocervinka.plcmqttbridge.config.VarMappingConfig;
 import ocervinka.plcmqttbridge.mqtt.MqttConfig;
@@ -41,6 +43,51 @@ public class PlcMqttBridgeTest {
         assertTrue(mqtt.published.contains("state/room.text=plcLower,value:two"));
     }
 
+    @Test
+    public void publishesOnlyNewCommandsWithoutRetainAcrossInitializationAndMqttRecovery() throws Exception {
+        FakeMqtt mqtt = new FakeMqtt();
+        FakePlc plc = new FakePlc();
+        Config defaults = config();
+        VarMappingConfig command = new ObjectMapper(new YAMLFactory()).readValue(
+                "var: FVEPWRSOURCE.(.*)SWITCH\n"
+                        + "state-topic: plc-fve/src-switch/{1}switch/set\nno-retain: true\n",
+                VarMappingConfig.class);
+        new PlcMqttBridge(new Config(defaults.plccoms, defaults.mqtt, null,
+                new VarMappingConfig[]{command, defaults.varMappings[0]}), mqtt, plc).connect();
+        String ds = "FVEPWRSOURCE.DSINVSWITCH";
+        String aqua = "FVEPWRSOURCE.AQUASWITCH";
+        List<PlccomsVar> vars = List.of(new PlccomsVar(ds, "STRING"), new PlccomsVar(aqua, "STRING"),
+                new PlccomsVar("Room.Text", "STRING"));
+
+        for (int cycle = 0; cycle < 3; cycle++) {
+            plc.listListener.apply(vars);
+            mqtt.published.clear();
+            mqtt.nonRetained.clear();
+            plc.diffListener.accept(new PlccomsDiff(ds, "SRCINV")); // DIFF before GET
+            plc.diffListener.accept(new PlccomsDiff(ds, "SRCINV", true));
+            plc.diffListener.accept(new PlccomsDiff(ds, "SRCINV")); // DIFF after GET
+            plc.diffListener.accept(new PlccomsDiff(aqua, "SRCAQUA", true));
+            plc.diffListener.accept(new PlccomsDiff("Room.Text", "initial state", true));
+            plc.diffListener.accept(new PlccomsDiff("Room.Text", "new state"));
+            assertEquals(List.of("state/room.text=initial state", "state/room.text=new state"), mqtt.published);
+            assertTrue(mqtt.nonRetained.isEmpty());
+
+            plc.diffListener.accept(new PlccomsDiff(ds, "SRCGRID"));
+            plc.diffListener.accept(new PlccomsDiff(ds, "SRCGRID"));
+            plc.diffListener.accept(new PlccomsDiff(aqua, "SRCINV"));
+            assertEquals(List.of("plc-fve/src-switch/dsinvswitch/set=SRCGRID",
+                    "plc-fve/src-switch/aquaswitch/set=SRCINV"), mqtt.nonRetained);
+        }
+
+        mqtt.connected = false;
+        plc.diffListener.accept(new PlccomsDiff(ds, "SRCINV"));
+        mqtt.connected = true;
+        plc.diffListener.accept(new PlccomsDiff(ds, "SRCINV"));
+        assertEquals(2, mqtt.nonRetained.size());
+        plc.diffListener.accept(new PlccomsDiff(ds, "SRCGRID"));
+        assertEquals("plc-fve/src-switch/dsinvswitch/set=SRCGRID", mqtt.nonRetained.get(2));
+    }
+
     private static Config config() {
         PlccomsConfig plc = new PlccomsConfig();
         plc.host = "localhost";
@@ -56,10 +103,14 @@ public class PlcMqttBridgeTest {
         boolean connected;
         MessageHandler handler;
         final List<String> published = new ArrayList<>();
+        final List<String> nonRetained = new ArrayList<>();
 
         public void connect(MqttConfig config) { connected = true; }
         public void close() { }
-        public void publish(String topic, String value) { published.add(topic + "=" + value); }
+        public void publish(String topic, String value, boolean retained) {
+            if (!connected) throw new IllegalStateException("MQTT disconnected");
+            (retained ? published : nonRetained).add(topic + "=" + value);
+        }
         public void subscribe(Collection<String> topics, MessageHandler handler) { this.handler = handler; }
     }
 
